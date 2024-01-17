@@ -1,5 +1,7 @@
-use crate::utils;
+//use crate::utils::utilss::must_read_stdin;
+use crate::codecs::audio_decoder::AudioDecoder;
 use crate::utils::utils::must_read_stdin;
+
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use std::io::{Error, ErrorKind};
@@ -16,11 +18,16 @@ use webrtc::rtp_transceiver::rtp_codec::{
     RTCRtpCodecCapability, RTCRtpCodecParameters, RTPCodecType,
 };
 
-struct Communication {
+/// Represents the WebRtc connection with other peer
+///
+/// Allows as to configure the different stages to establish the connection
+pub struct Communication {
+    /// 
     peer_connection: Arc<RTCPeerConnection>,
 }
 impl Communication {
-    async fn new(stun_adress: String) -> Result<Self, Error> {
+    /// Create new Comunication, needs a correct stun server adress to work
+    pub async fn new(stun_adress: String) -> Result<Self, Error> {
         let api = create_api()?;
 
         let config = RTCConfiguration {
@@ -43,8 +50,8 @@ impl Communication {
 
         Ok(Self { peer_connection })
     }
-
-    async fn set_sdp(&self) -> Result<(), Error> {
+    /// Waits to recibe an sdp string offer to setting the pc remote description
+    pub async fn set_sdp(&self) -> Result<(), Error> {
         println!("Paste the SDP offer from the remote peer");
         let line = must_read_stdin()?;
         let desc_data = decode(line.as_str())?;
@@ -57,6 +64,10 @@ impl Communication {
             ));
         };
         Ok(())
+    }
+
+    pub fn get_peer(&self) -> Arc<RTCPeerConnection>{
+        self.peer_connection.clone()
     }
 }
 
@@ -100,10 +111,6 @@ fn create_api() -> Result<API, Error> {
     return Ok(api);
 }
 
-enum SDPDecodeError {
-    Base64Error,
-    FromUtf8Error,
-}
 
 fn decode(s: &str) -> Result<String, Error> {
     let b = match BASE64_STANDARD.decode(s) {

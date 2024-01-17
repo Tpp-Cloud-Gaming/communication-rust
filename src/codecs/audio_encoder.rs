@@ -1,4 +1,4 @@
-use cpal::traits::{DeviceTrait, HostTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, FromSample, Sample, Stream, SupportedStreamConfig};
 use opus::Encoder;
 use std::io::Error;
@@ -9,7 +9,7 @@ pub struct AudioEncoder {
     device: Device,
     encoder: Arc<Mutex<Encoder>>,
     config: SupportedStreamConfig,
-    pub stream: Option<Stream>,
+    stream: Option<Stream>,
     sender: Sender<Vec<u8>>,
 }
 
@@ -114,7 +114,16 @@ impl AudioEncoder {
                 ));
             }
         };
-        Ok(stream)
+
+        match stream.play(){
+            Ok(_) => return  Ok(stream),
+            Err(_) => return Err(Error::new(
+                std::io::ErrorKind::Other,
+                "Error playing stream",
+            )),
+        };
+
+        
     }
 
     pub fn stop(&mut self) -> Result<(), Error> {
@@ -160,7 +169,7 @@ impl AudioEncoder {
                 break;
             }
         }
-        return Ok(device);
+        return Ok(host.default_output_device().unwrap());
     }
 }
 
@@ -169,8 +178,6 @@ where
     T: Sample,
     U: Sample + hound::Sample + FromSample<T>,
 {   
-
-
     if let Ok(mut guard) = encoder.lock() {
 
         match guard.encode_vec_float(input, 960){

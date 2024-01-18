@@ -26,3 +26,7 @@ anyhow = "1.0.79"
  name = "Receiver"
  path = "src/receiver.rs"
 
+ [[bin]]
+ name = "Main"
+ path = "src/main.rs"
+

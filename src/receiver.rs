@@ -2,8 +2,9 @@ mod codecs;
 mod webrtcommunication;
 mod utils;
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use std::io::{Error, ErrorKind};
+use std::time::Duration;
 
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
@@ -14,13 +15,26 @@ use webrtc::{rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndica
 
 use dotenv::dotenv;
 
+use std::sync::{Mutex};
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc;
 use crate::webrtcommunication::communication::Communication;
 use crate::codecs::audio_decoder::AudioDecoder;
-
+use cpal::traits::{HostTrait, StreamTrait};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     dotenv().ok();
+
+    let (tx_decoder_1, rx_decoder_1): (Sender<f32>, Receiver<f32>) = tokio::sync::mpsc::channel(960);
+    const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/recorded.wav");
+    let decoder1 = AudioDecoder::new(PATH).unwrap();
+    let stream1 = decoder1.start(Arc::new(Mutex::new(rx_decoder_1))).unwrap();
+    stream1.play().unwrap();
+
+    
+    
+
 
 
     let comunication = Communication::new("stun:stun.l.google.com:19302".to_owned()).await?;
@@ -60,10 +74,13 @@ async fn main() -> Result<(), Error> {
         });
 
         let notify_rx2 = Arc::clone(&notify_rx);
-
+        let (tx, rx): (Sender<f32>, Receiver<f32>) = tokio::sync::mpsc::channel(100);
         const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/recorded.wav");
         let decoder = AudioDecoder::new(PATH).unwrap();
+        let stream = decoder.start(Arc::new(Mutex::new(rx))).unwrap();
+        stream.play().unwrap();
         
+        let tx_decoder_1_clone = tx_decoder_1.clone();
         Box::pin(async move {
             let codec = track.codec();
             let mime_type = codec.capability.mime_type.to_lowercase();
@@ -71,7 +88,7 @@ async fn main() -> Result<(), Error> {
                 println!("Got Opus track, saving to disk as output.opus (48 kHz, 2 channels)");
 
                 tokio::spawn(async move {
-                    let _ = read_track(track, notify_rx2, decoder).await;
+                    let _ = read_track(track, notify_rx2, decoder, &tx_decoder_1_clone).await;
                 });
             }
         })
@@ -157,14 +174,17 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn read_track(track: Arc<TrackRemote>, notify: Arc<Notify>, mut decoder: AudioDecoder) -> Result<(), ()> {
+async fn read_track(track: Arc<TrackRemote>, notify: Arc<Notify>, mut decoder: AudioDecoder, tx: &Sender<f32>) -> Result<(), ()> {
     loop {
         tokio::select! {
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
-                    println!("LLego LUCAS PAQUETA");
+                    //println!("LLego LUCAS PAQUETA");
+                    let value = decoder.decode(rtp_packet.payload.to_vec()).unwrap();
+                    for v in value {
+                        let _ = tx.try_send(v);
+                    }           
 
-                    decoder.decode(rtp_packet.payload.to_vec());
                 }else{
                     println!("Error leyendo paquete");
                     return Ok(());

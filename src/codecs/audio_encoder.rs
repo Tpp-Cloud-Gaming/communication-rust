@@ -15,7 +15,7 @@ pub struct AudioEncoder {
 
 impl AudioEncoder {
     pub fn new(device_name: String, sender: Sender<Vec<u8>>) -> Result<Self, Error> {
-        let device = Self::search_device(device_name)?;
+        let device = search_device(device_name)?;
 
         log::info!("Device find: {}", device.name().unwrap());
 
@@ -134,43 +134,7 @@ impl AudioEncoder {
         Ok(())
     }
 
-    fn search_device(name: String) -> Result<Device, Error> {
-        let host = cpal::default_host();
-
-        // Set up the input device and stream with the default input config.
-        let mut device = match host.default_input_device() {
-            Some(device) => device,
-            None => {
-                return Err(Error::new(
-                    std::io::ErrorKind::Other,
-                    "Failed to get default input device",
-                ))
-            }
-        };
-
-        let output_devices = match host.output_devices() {
-            Ok(devices) => devices,
-            Err(_) => {
-                return Err(Error::new(
-                    std::io::ErrorKind::Other,
-                    "Failed to get output devices",
-                ))
-            }
-        };
-
-        for actual_device in output_devices {
-            let actual_name = match actual_device.name() {
-                Ok(n) => n,
-                Err(_) => continue,
-            };
-
-            if actual_name.contains(&name) {
-                device = actual_device;
-                break;
-            }
-        }
-        return Ok(host.default_output_device().unwrap());
-    }
+    
 }
 
 fn write_input_data<T, U>(input: &[f32], encoder: &mut Arc<Mutex<Encoder>>, sender: Sender<Vec<u8>>)
@@ -196,4 +160,42 @@ where
     //     .unwrap();
         
     // sender.send(buffer).unwrap();
+}
+
+fn search_device(name: String) -> Result<Device, Error> {
+    let host = cpal::default_host();
+
+    // Set up the input device and stream with the default input config.
+    let mut device = match host.default_input_device() {
+        Some(device) => device,
+        None => {
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to get default input device",
+            ))
+        }
+    };
+
+    let output_devices = match host.output_devices() {
+        Ok(devices) => devices,
+        Err(_) => {
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to get output devices",
+            ))
+        }
+    };
+
+    for actual_device in output_devices {
+        let actual_name = match actual_device.name() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+
+        if actual_name.contains(&name) {
+            device = actual_device;
+            break;
+        }
+    }
+    return Ok(device);
 }

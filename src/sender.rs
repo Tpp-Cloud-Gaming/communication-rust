@@ -1,5 +1,5 @@
 mod webrtcommunication;
-mod codecs;
+mod audio;
 mod utils;
 
 use std::sync::Arc;
@@ -8,7 +8,8 @@ use std::sync::mpsc;
 use std::time::Duration;
 use std::io::{Error, ErrorKind};
 
-use crate::codecs::audio_encoder::AudioEncoder;
+use crate::audio::audio_capture::AudioCapture;
+use crate::audio::audio_encoder::AudioEncoder;
 
 use crate::webrtcommunication::communication::Communication;
 
@@ -35,14 +36,14 @@ async fn main() -> Result<(), Error> {
     dotenv().ok();
 
     //Create video frames channels
-    let (tx, rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
+    let (tx, rx): (Sender<Vec<f32>>, Receiver<Vec<f32>>) = mpsc::channel();
 
     let comunication = Communication::new("stun:stun.l.google.com:19302".to_owned()).await?;
 
-    let mut encoder = AudioEncoder::new("Altavoces (High Definition Audio Device)".to_string(),tx,)?;
+    let mut audio_capture = AudioCapture::new("Altavoces (High Definition Audio Device)".to_string(),tx)?;
     
     // Si no nos guardamos el stream se traba
-    let stream = encoder.start()?;
+    let stream = audio_capture.start()?;
     //stream.play().unwrap();
 
     let notify_tx = Arc::new(Notify::new());
@@ -73,13 +74,17 @@ async fn main() -> Result<(), Error> {
     tokio::spawn(async move {
         // Wait for connection established
         notify_audio.notified().await;
+        let mut encoder = AudioEncoder::new().unwrap();
 
         loop {
             let data = rx.recv().unwrap();
+            let encoded_data = encoder.encode(data).unwrap();
             let sample_duration = Duration::from_millis((2 * 10000000) / 48000);//TODO: no hardcodear
+
+            
             audio_track
             .write_sample(&Sample {
-                data: data.try_into().unwrap(),
+                data: encoded_data.try_into().unwrap(),
                 duration: sample_duration,
                 ..Default::default()
             })
@@ -89,6 +94,8 @@ async fn main() -> Result<(), Error> {
             //let _ = audio_done_tx.try_send(());
         }
     });
+    //    let a = start_sender(audio_track, notify_audio, rx);
+
 
     set_peer_events(&pc, notify_tx, done_tx);
 
@@ -133,7 +140,7 @@ async fn main() -> Result<(), Error> {
         return Err(Error::new(ErrorKind::Other, "Error closing peer connection"));
     }
 
-    encoder.stop()?;
+    audio_capture.stop()?;
 
     Ok(())
 }

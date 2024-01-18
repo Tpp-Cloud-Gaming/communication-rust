@@ -11,18 +11,18 @@ use base64::Engine;
 
 use tokio::sync::Notify;
 
-use webrtc::interceptor::stream_info::RTCPFeedback;
-use webrtc::peer_connection::{self, RTCPeerConnection};
+use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication, api::media_engine::MIME_TYPE_OPUS, rtp_transceiver::rtp_codec::RTPCodecType, ice_transport::ice_connection_state::RTCIceConnectionState, track::track_remote::TrackRemote};
 
 use dotenv::dotenv;
 
-use std::sync::{Mutex};
+use std::sync::Mutex;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::mpsc;
+
+use cpal::traits::StreamTrait;
+
 use crate::webrtcommunication::communication::Communication;
 use crate::audio::audio_decoder::AudioDecoder;
-use cpal::traits::{HostTrait, StreamTrait};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -30,13 +30,9 @@ async fn main() -> Result<(), Error> {
     dotenv().ok();
     
     let (tx_decoder_1, rx_decoder_1): (Sender<f32>, Receiver<f32>) = tokio::sync::mpsc::channel(960);
-    const PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/recorded.wav");
-    //let decoder1 = AudioDecoder::new(PATH).unwrap();
-    //let stream1 = decoder1.start(Arc::new(Mutex::new(rx_decoder_1))).unwrap();
     let audio_player = audio::audio_player::AudioPlayer::new("M2380A (NVIDIA High Definition Audio)", Arc::new(Mutex::new(rx_decoder_1))).unwrap();
     let stream = audio_player.start().unwrap();
     stream.play().unwrap();
-    //stream1.play().unwrap();
 
     let comunication = Communication::new("stun:stun.l.google.com:19302".to_owned()).await?;
     

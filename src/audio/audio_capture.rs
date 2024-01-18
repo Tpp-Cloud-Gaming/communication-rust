@@ -5,14 +5,25 @@ use cpal::{Device, SupportedStreamConfig, Stream, traits::{DeviceTrait, StreamTr
 
 use crate::audio::audio_utils::search_device;
 
+/// Allows user to capture audio from a output device.
 pub struct AudioCapture {
+    /// Output device to be captured.
     device: Device,
+    /// Output device config.
     config: SupportedStreamConfig,
+    /// Flow of audio data from the selected audio device.
     stream: Option<Stream>,
+    /// Channel where the audio data is writen
     sender: Sender<Vec<f32>>,
 }
 
 impl AudioCapture {
+    /// Returns a AudioCapture
+    ///
+    /// # Arguments
+    ///
+    /// * `device_name` - A string that represents the device name
+    /// * `sender` - A channel where AudioCapture writes the output device audio data.
     pub fn new(device_name: String, sender: Sender<Vec<f32>>) -> Result<Self, Error> {
         
         let device = search_device(device_name)?;
@@ -37,6 +48,7 @@ impl AudioCapture {
         })
     }
 
+    /// Starts capturing audio from the chosen output device.
     pub fn start(&mut self) -> Result<Stream, Error> {
 
         let err_fn = move |err| {
@@ -110,6 +122,7 @@ impl AudioCapture {
         
     }
 
+    /// Stops audio capture.
     pub fn stop(&mut self) -> Result<(), Error> {
         match self.stream.take() {
             Some(stream) => drop(stream),
@@ -121,28 +134,16 @@ impl AudioCapture {
 }
 
 
+/// Writes data on the sender.
+/// 
+/// # Arguments
+///
+/// * `input` - Data to be writen
+/// * `sender` - Channel where data is writed.
 fn write_input_data<T, U>(input: &[f32], sender: Sender<Vec<f32>>)
 where
     T: Sample,
     U: Sample + hound::Sample + FromSample<T>,
 {   
-    /*if let Ok(mut guard) = encoder.lock() {
-
-        match guard.encode_vec_float(input, 960){
-            Ok(buffer) => {
-                sender.send(buffer).unwrap();
-            },
-            Err(e) => {
-                println!("Error: {:?}", e);
-            }
-        }
-    }*/
     sender.send(input.to_vec()).unwrap();
-    // let buffer = encoder
-    //     .lock()
-    //     .unwrap()
-    //     .encode_vec_float(input, 960)
-    //     .unwrap();
-        
-    // sender.send(buffer).unwrap();
 }

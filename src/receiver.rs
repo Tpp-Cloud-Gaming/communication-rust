@@ -1,9 +1,9 @@
-mod webrtcommunication;
-mod utils;
-mod audio;
+pub mod audio;
+pub mod utils;
+pub mod webrtcommunication;
 
-use std::sync::Arc;
 use std::io::{Error, ErrorKind};
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::prelude::BASE64_STANDARD;
@@ -12,52 +12,62 @@ use base64::Engine;
 use tokio::sync::Notify;
 
 use webrtc::peer_connection::RTCPeerConnection;
-use webrtc::{rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication, api::media_engine::MIME_TYPE_OPUS, rtp_transceiver::rtp_codec::RTPCodecType, ice_transport::ice_connection_state::RTCIceConnectionState, track::track_remote::TrackRemote};
-
-use dotenv::dotenv;
+use webrtc::{
+    api::media_engine::MIME_TYPE_OPUS, ice_transport::ice_connection_state::RTCIceConnectionState,
+    rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication,
+    rtp_transceiver::rtp_codec::RTPCodecType, track::track_remote::TrackRemote,
+};
 
 use std::sync::Mutex;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use cpal::traits::StreamTrait;
 
-use crate::webrtcommunication::communication::Communication;
 use crate::audio::audio_decoder::AudioDecoder;
+use crate::webrtcommunication::communication::Communication;
+
+use crate::utils::webrtc_const::{ENCODE_BUFFER_SIZE, STUN_ADRESS};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-
-    dotenv().ok();
-    
-    let (tx_decoder_1, rx_decoder_1): (Sender<f32>, Receiver<f32>) = tokio::sync::mpsc::channel(960);
-    let audio_player = audio::audio_player::AudioPlayer::new("M2380A (NVIDIA High Definition Audio)", Arc::new(Mutex::new(rx_decoder_1))).unwrap();
+    let (tx_decoder_1, rx_decoder_1): (Sender<f32>, Receiver<f32>) =
+        tokio::sync::mpsc::channel(ENCODE_BUFFER_SIZE);
+    let audio_player = audio::audio_player::AudioPlayer::new(
+        "Headset Earphone (G435 Wireless Gaming Headset)",
+        Arc::new(Mutex::new(rx_decoder_1)),
+    )
+    .unwrap();
     let stream = audio_player.start().unwrap();
     stream.play().unwrap();
 
-    let comunication = Communication::new("stun:stun.l.google.com:19302".to_owned()).await?;
-    
+    let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
+
     let notify_tx = Arc::new(Notify::new());
     let notify_rx = notify_tx.clone();
 
     let peer_connection = comunication.get_peer();
-    
+
     // Set a handler for when a new remote track starts, this handler saves buffers to disk as
     // an ivf file, since we could have multiple video tracks we provide a counter.
     // In your application this is where you would handle/process video
     set_on_track_handler(&peer_connection, notify_rx, tx_decoder_1);
 
     // Allow us to receive 1 audio track
-    if let Err(_) = peer_connection.add_transceiver_from_kind(RTPCodecType::Audio, None).await {
-        return Err(Error::new(ErrorKind::Other, "Error adding audio transceiver"));
+    if let Err(_) = peer_connection
+        .add_transceiver_from_kind(RTPCodecType::Audio, None)
+        .await
+    {
+        return Err(Error::new(
+            ErrorKind::Other,
+            "Error adding audio transceiver",
+        ));
     }
 
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
 
-    
     // Set the handler for ICE connection state
     // This will notify you when the peer has connected/disconnected
     set_on_ice_connection_state_change_handler(&peer_connection, notify_tx, done_tx);
-
 
     // Set the remote SessionDescription: ACA METER USER INPUT Y PEGAR EL SDP
     // Wait for the offer to be pasted
@@ -67,7 +77,7 @@ async fn main() -> Result<(), Error> {
     // Create an answer
     let answer = match peer_connection.create_answer(None).await {
         Ok(answer) => answer,
-        Err(_) => return Err(Error::new(ErrorKind::Other, "Error creating answer")),  
+        Err(_) => return Err(Error::new(ErrorKind::Other, "Error creating answer")),
     };
 
     // Create channel that is blocked until ICE Gathering is complete
@@ -75,7 +85,10 @@ async fn main() -> Result<(), Error> {
 
     // Sets the LocalDescription, and starts our UDP listeners
     if let Err(_) = peer_connection.set_local_description(answer).await {
-        return Err(Error::new(ErrorKind::Other, "Error setting local description"))
+        return Err(Error::new(
+            ErrorKind::Other,
+            "Error setting local description",
+        ));
     }
 
     // Block until ICE Gathering is complete, disabling trickle ICE
@@ -90,13 +103,13 @@ async fn main() -> Result<(), Error> {
         let b64 = BASE64_STANDARD.encode(&json_str);
         println!("{b64}");
     } else {
-        println!("generate local_description failed!");
+        log::error!("RECEIVER | Generate local_description failed!");
     }
 
     println!("Press ctrl-c to stop");
     tokio::select! {
         _ = done_rx.recv() => {
-            println!("received done signal!");
+            log::info!("RECEIVER | Received done signal");
         }
         _ = tokio::signal::ctrl_c() => {
             println!();
@@ -104,19 +117,24 @@ async fn main() -> Result<(), Error> {
     };
 
     if let Err(_) = peer_connection.close().await {
-        return Err(Error::new(ErrorKind::Other, "Error closing peer connection"));
+        return Err(Error::new(
+            ErrorKind::Other,
+            "Error closing peer connection",
+        ));
     }
 
     Ok(())
 }
 
-fn set_on_track_handler(peer_connection: &Arc<RTCPeerConnection>, notify_rx: Arc<Notify>, tx_decoder_1: Sender<f32> ) {
-
+fn set_on_track_handler(
+    peer_connection: &Arc<RTCPeerConnection>,
+    notify_rx: Arc<Notify>,
+    tx_decoder_1: Sender<f32>,
+) {
     let pc = Arc::downgrade(&peer_connection);
 
     peer_connection.on_track(Box::new(move |track, _, _| {
         // Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
-        println!("Trackmania");
         let media_ssrc = track.ssrc();
         let pc2 = pc.clone();
         tokio::spawn(async move {
@@ -140,15 +158,15 @@ fn set_on_track_handler(peer_connection: &Arc<RTCPeerConnection>, notify_rx: Arc
             }
         });
 
-        let notify_rx2 = Arc::clone(&notify_rx);   
+        let notify_rx2 = Arc::clone(&notify_rx);
         let decoder = AudioDecoder::new().unwrap();
-        
+
         let tx_decoder_1_clone = tx_decoder_1.clone();
         Box::pin(async move {
             let codec = track.codec();
             let mime_type = codec.capability.mime_type.to_lowercase();
             if mime_type == MIME_TYPE_OPUS.to_lowercase() {
-                println!("Got Opus track, saving to disk as output.opus (48 kHz, 2 channels)");
+                log::info!("RECEIVER | Got OPUS Track");
 
                 tokio::spawn(async move {
                     let _ = read_track(track, notify_rx2, decoder, &tx_decoder_1_clone).await;
@@ -158,18 +176,19 @@ fn set_on_track_handler(peer_connection: &Arc<RTCPeerConnection>, notify_rx: Arc
     }));
 }
 
-
-fn set_on_ice_connection_state_change_handler(peer_connection: &Arc<RTCPeerConnection>, notify_tx: Arc<Notify>, done_tx: Sender<()>) {
+fn set_on_ice_connection_state_change_handler(
+    peer_connection: &Arc<RTCPeerConnection>,
+    notify_tx: Arc<Notify>,
+    done_tx: Sender<()>,
+) {
     peer_connection.on_ice_connection_state_change(Box::new(
         move |connection_state: RTCIceConnectionState| {
-            println!("Connection State has changed {connection_state}");
+            log::info!("RECEIVER | ICE Connection State has changed | {connection_state}");
 
             if connection_state == RTCIceConnectionState::Connected {
                 println!("Ctrl+C the remote client to stop the demo");
             } else if connection_state == RTCIceConnectionState::Failed {
                 notify_tx.notify_waiters();
-
-                println!("Done writing media files");
 
                 let _ = done_tx.try_send(());
             }
@@ -178,16 +197,21 @@ fn set_on_ice_connection_state_change_handler(peer_connection: &Arc<RTCPeerConne
     ));
 }
 
-async fn read_track(track: Arc<TrackRemote>, notify: Arc<Notify>, mut decoder: AudioDecoder, tx: &Sender<f32>) -> Result<(), ()> {
+async fn read_track(
+    track: Arc<TrackRemote>,
+    notify: Arc<Notify>,
+    mut decoder: AudioDecoder,
+    tx: &Sender<f32>,
+) -> Result<(), ()> {
     loop {
         tokio::select! {
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
-                    println!("LLego LUCAS PAQUETA");
+                    println!("Llega Luquitas");
                     let value = decoder.decode(rtp_packet.payload.to_vec()).unwrap();
                     for v in value {
                         let _ = tx.try_send(v);
-                    }           
+                    }
 
                 }else{
                     println!("Error leyendo paquete");

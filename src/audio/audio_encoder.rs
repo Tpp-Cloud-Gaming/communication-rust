@@ -1,7 +1,10 @@
-
 use opus::Encoder;
 
 use std::io::Error;
+
+use crate::utils::webrtc_const::ENCODE_BUFFER_SIZE;
+
+use crate::utils::webrtc_const::SAMPLE_RATE;
 
 pub struct AudioEncoder {
     encoder: Encoder,
@@ -9,27 +12,17 @@ pub struct AudioEncoder {
 
 impl AudioEncoder {
     pub fn new() -> Result<Self, Error> {
-
-        let sample_rate: u32 = std::env::var("SAMPLE_RATE")
-            .expect("SAMPLE_RATE env not found.")
-            .parse()
-            .expect("Failed to parse SAMPLE_RATE as u32");
-
         let encoder =
-            opus::Encoder::new(sample_rate, opus::Channels::Stereo, opus::Application::Voip)
+            opus::Encoder::new(SAMPLE_RATE, opus::Channels::Stereo, opus::Application::Voip)
                 .unwrap();
 
-        Ok(Self {
-            encoder: encoder,
-        })
+        Ok(Self { encoder: encoder })
     }
 
     pub fn encode(&mut self, data: Vec<f32>) -> Result<Vec<u8>, opus::Error> {
-        match self.encoder.encode_vec_float(&data, 960) {
+        match self.encoder.encode_vec_float(&data, ENCODE_BUFFER_SIZE) {
             Ok(buffer) => Ok(buffer),
             Err(e) => Err(e),
         }
     }
-    
 }
-

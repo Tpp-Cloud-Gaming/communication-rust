@@ -1,12 +1,12 @@
-mod webrtcommunication;
-mod audio;
-mod utils;
+pub mod audio;
+pub mod utils;
+pub mod webrtcommunication;
 
-use std::sync::Arc;
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::mpsc;
-use std::time::Duration;
 use std::io::{Error, ErrorKind};
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
+use std::time::Duration;
 
 use crate::audio::audio_capture::AudioCapture;
 use crate::audio::audio_encoder::AudioEncoder;
@@ -16,50 +16,54 @@ use crate::webrtcommunication::communication::Communication;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 
-
-use cpal::traits::StreamTrait;
 use tokio::sync::Notify;
 
 use webrtc::api::media_engine::MIME_TYPE_OPUS;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
-use webrtc::peer_connection::RTCPeerConnection;
-use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
-use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
-use webrtc::track::track_local::TrackLocal;
-use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 use webrtc::media::Sample;
+use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
+use webrtc::peer_connection::RTCPeerConnection;
+use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp_transceiver::rtp_sender::RTCRtpSender;
+use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
+use webrtc::track::track_local::TrackLocal;
 
-use dotenv::dotenv;
+use crate::utils::webrtc_const::{CHANNELS, SAMPLE_RATE, STREAM_TRACK_ID, STUN_ADRESS, TRACK_ID};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    dotenv().ok();
-
     //Create video frames channels
+
     let (tx, rx): (Sender<Vec<f32>>, Receiver<Vec<f32>>) = mpsc::channel();
 
-    let comunication = Communication::new("stun:stun.l.google.com:19302".to_owned()).await?;
+    let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
-    let mut audio_capture = AudioCapture::new("Altavoces (High Definition Audio Device)".to_string(),tx)?;
-    
-    // Si no nos guardamos el stream se traba
-    let stream = audio_capture.start()?;
-    //stream.play().unwrap();
+    let mut audio_capture = AudioCapture::new("Speakers (Scarlett Solo USB)".to_string(), tx)?;
 
     let notify_tx = Arc::new(Notify::new());
     let notify_audio = notify_tx.clone();
 
-    let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
-    let audio_done_tx = done_tx.clone();
+    //NO BORRAR
+    let stream = audio_capture.start()?;
+    //stream.play().unwrap();
 
-    let audio_track = create_audio_track();
+    let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
 
     let pc = comunication.get_peer();
+    let audio_track = create_audio_track();
 
-    // // Add this newly created track to the PeerConnection
-    let rtp_sender = match pc.add_track(Arc::clone(&audio_track) as Arc<dyn TrackLocal + Send + Sync>).await {
+    //let rtp_sender = create_tracks(&pc, audio_track.clone()).await?;
+    let rtp_sender = match pc
+        .add_track(Arc::clone(&audio_track) as Arc<dyn TrackLocal + Send + Sync>)
+        .await
+    {
         Ok(rtp_sender) => rtp_sender,
-        Err(_) => return Err(Error::new(ErrorKind::Other, "Error setting local description")),
+        Err(_) => {
+            return Err(Error::new(
+                ErrorKind::Other,
+                "Error setting local description",
+            ))
+        }
     };
 
     // Read incoming RTCP packets
@@ -77,25 +81,31 @@ async fn main() -> Result<(), Error> {
         let mut encoder = AudioEncoder::new().unwrap();
 
         loop {
+            println!("Se va luquitas");
+            //TODO: unwraps
             let data = rx.recv().unwrap();
-            let encoded_data = encoder.encode(data).unwrap();
-            let sample_duration = Duration::from_millis((2 * 10000000) / 48000);//TODO: no hardcodear
+            let encoded_data = match encoder.encode(data) {
+                Ok(d) => d,
+                Err(err) => {
+                    log::error!("SENDER | Error encoding audio | {}", err);
+                    continue;
+                }
+            };
+            let sample_duration =
+                Duration::from_millis((CHANNELS as u64 * 10000000) / SAMPLE_RATE as u64); //TODO: no hardcodear
 
-            
-            audio_track
-            .write_sample(&Sample {
-                data: encoded_data.try_into().unwrap(),
-                duration: sample_duration,
-                ..Default::default()
-            })
-            .await.unwrap();//TODO: sacar unwrap
-            
-
-            //let _ = audio_done_tx.try_send(());
+            if let Err(err) = audio_track
+                .write_sample(&Sample {
+                    data: encoded_data.try_into().unwrap(),
+                    duration: sample_duration,
+                    ..Default::default()
+                })
+                .await
+            {
+                log::error!("SENDER | Error writing sample | {}", err);
+            }
         }
     });
-    //    let a = start_sender(audio_track, notify_audio, rx);
-
 
     set_peer_events(&pc, notify_tx, done_tx);
 
@@ -104,13 +114,16 @@ async fn main() -> Result<(), Error> {
         Ok(offer) => offer,
         Err(_) => return Err(Error::new(ErrorKind::Other, "Error creating offer")),
     };
-    
+
     // Create channel that is blocked until ICE Gathering is complete
     let mut gather_complete = pc.gathering_complete_promise().await;
-    
+
     // Sets the LocalDescription, and starts our UDP listeners
-    if  let Err(_e) = pc.set_local_description(offer).await {
-        return Err(Error::new(ErrorKind::Other, "Error setting local description"));
+    if let Err(_e) = pc.set_local_description(offer).await {
+        return Err(Error::new(
+            ErrorKind::Other,
+            "Error setting local description",
+        ));
     }
 
     let _ = gather_complete.recv().await;
@@ -120,24 +133,26 @@ async fn main() -> Result<(), Error> {
         let b64 = BASE64_STANDARD.encode(&json_str);
         println!("{b64}");
     } else {
-        println!("generate local_description failed!");
+        log::error!("SENDER | Generate local_description failed");
     }
 
     comunication.set_sdp().await?;
-    
+
     println!("Press ctrl-c to stop");
     tokio::select! {
         _ = done_rx.recv() => {
-            println!("received done signal!");
+            log::info!("SENDER | Received done signal");
         }
         _ = tokio::signal::ctrl_c() => {
             println!();
         }
     };
 
-
     if let Err(_) = pc.close().await {
-        return Err(Error::new(ErrorKind::Other, "Error closing peer connection"));
+        return Err(Error::new(
+            ErrorKind::Other,
+            "Error closing peer connection",
+        ));
     }
 
     audio_capture.stop()?;
@@ -145,70 +160,65 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-fn create_audio_track() -> Arc<TrackLocalStaticSample>{
+fn create_audio_track() -> Arc<TrackLocalStaticSample> {
     Arc::new(TrackLocalStaticSample::new(
         RTCRtpCodecCapability {
             mime_type: MIME_TYPE_OPUS.to_owned(),
             ..Default::default()
         },
-        "audio".to_owned(),
-        "webrtc-rs".to_owned(),
+        TRACK_ID.to_owned(),
+        STREAM_TRACK_ID.to_owned(),
     ))
 }
 
-
-async fn start_sender(audio_track: Arc<TrackLocalStaticSample>, notify_audio: Arc<Notify>, rx: Receiver<Vec<u8>> ) -> Result<(), Error>{
-    //let audio_file_name = audio_file.to_owned();
-    tokio::spawn(async move {
-        // Wait for connection established
-        notify_audio.notified().await;
-
-        loop {
-            println!("MANDALORIAN");
-            let data = rx.recv().unwrap();
-            let sample_duration = Duration::from_millis((2 * 10000000) / 48000);//TODO: no hardcodear
-            audio_track
-            .write_sample(&Sample {
-                data: data.try_into().unwrap(),
-                duration: sample_duration,
-                ..Default::default()
-            })
-            .await.unwrap();//TODO: sacar unwrap
-
-            //let _ = audio_done_tx.try_send(());
-        }
-    });
-    Ok(())
-}
-
-
-
-fn set_peer_events(pc: &Arc<RTCPeerConnection>, notify_tx: Arc<Notify>, done_tx: tokio::sync::mpsc::Sender<()>){
+fn set_peer_events(
+    pc: &Arc<RTCPeerConnection>,
+    notify_tx: Arc<Notify>,
+    done_tx: tokio::sync::mpsc::Sender<()>,
+) {
     // Set the handler for ICE connection state
     // This will notify you when the peer has connected/disconnected
-    pc.on_ice_connection_state_change(Box::new(
-        move |connection_state: RTCIceConnectionState| {
-            println!("Connection State has changed {connection_state}");
-            if connection_state == RTCIceConnectionState::Connected {
-                notify_tx.notify_waiters();
-            }
-            Box::pin(async {})
-        },
-    ));
+    pc.on_ice_connection_state_change(Box::new(move |connection_state: RTCIceConnectionState| {
+        log::info!("SENDER | ICE Connection State has changed | {connection_state}");
+        if connection_state == RTCIceConnectionState::Connected {
+            notify_tx.notify_waiters();
+        }
+        Box::pin(async {})
+    }));
 
     // Set the handler for Peer connection state
     // This will notify you when the peer has connected/disconnected
     pc.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
-        println!("Peer Connection State has changed: {s}");
+        log::info!("Peer Connection State has changed {s}");
 
         if s == RTCPeerConnectionState::Failed {
             // Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
             // Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
             // Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
-            println!("Peer Connection has gone to failed exiting");
+            log::error!("SENDER | Peer connection failed");
             let _ = done_tx.try_send(());
         }
 
         Box::pin(async {})
     }));
+}
+
+async fn create_tracks(
+    pc: &Arc<RTCPeerConnection>,
+    audio_track: Arc<TrackLocalStaticSample>,
+) -> Result<(Arc<RTCRtpSender>), Error> {
+    // // Add this newly created track to the PeerConnection
+    let rtp_sender = match pc
+        .add_track(Arc::clone(&audio_track) as Arc<dyn TrackLocal + Send + Sync>)
+        .await
+    {
+        Ok(rtp_sender) => rtp_sender,
+        Err(_) => {
+            return Err(Error::new(
+                ErrorKind::Other,
+                "Error setting local description",
+            ))
+        }
+    };
+    Ok(rtp_sender)
 }

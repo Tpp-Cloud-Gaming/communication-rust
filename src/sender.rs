@@ -38,7 +38,10 @@ async fn main() -> Result<(), Error> {
 
     let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
-    let mut audio_capture = AudioCapture::new("Speakers (Scarlett Solo USB)".to_string(), tx)?;
+    let mut audio_capture = AudioCapture::new(
+        "Headset Earphone (G435 Wireless Gaming Headset)".to_string(),
+        tx,
+    )?;
 
     let notify_tx = Arc::new(Notify::new());
     let notify_audio = notify_tx.clone();

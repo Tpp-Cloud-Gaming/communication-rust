@@ -6,7 +6,7 @@ use std::io::{Error, ErrorKind};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use crate::audio::audio_capture::AudioCapture;
 use crate::audio::audio_encoder::AudioEncoder;
@@ -22,7 +22,7 @@ use webrtc::api::media_engine::MIME_TYPE_OPUS;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::media::Sample;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
-use webrtc::peer_connection::RTCPeerConnection;
+use webrtc::peer_connection::{self, RTCPeerConnection};
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::rtp_transceiver::rtp_sender::RTCRtpSender;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
@@ -55,6 +55,43 @@ async fn main() -> Result<(), Error> {
     let pc = comunication.get_peer();
     let audio_track = create_audio_track();
 
+    let latency_channel = match pc.create_data_channel("latency", None).await {
+        Ok(ch) => ch,
+        Err(_) => {
+            return Err(Error::new(
+                ErrorKind::Other,
+                "Error creating latency data channel",
+            ))
+        }
+    };
+    println!("Data channel created");
+    // Register channel opening handling
+    let d1 = Arc::clone(&latency_channel);
+    latency_channel.on_open(Box::new(move || {
+        println!("Data channel '{}'-'{}' open. Random messages will now be sent to any connected DataChannels every 2 seconds", d1.label(), d1.id());
+
+        let d2 = Arc::clone(&d1);
+        Box::pin(async move {
+            loop {
+                let timeout = tokio::time::sleep(Duration::from_secs(2));
+                tokio::pin!(timeout);
+
+                tokio::select! {
+                    _ = timeout.as_mut() => {
+                        let actual_time = SystemTime::now();
+                        let since_the_epoch = actual_time
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .expect("Time went backwards");
+                        let nanos = since_the_epoch.as_nanos(); // Get the time in nanoseconds
+                        let nanos_str = format!("{}", nanos); // Convert nanoseconds to String
+                        println!("Sending '{:?}'", nanos);
+                        d2.send_text(nanos_str).await.unwrap();
+                    }
+                };
+            }
+        })
+    }));
+
     //let rtp_sender = create_tracks(&pc, audio_track.clone()).await?;
     let rtp_sender = match pc
         .add_track(Arc::clone(&audio_track) as Arc<dyn TrackLocal + Send + Sync>)
@@ -84,7 +121,7 @@ async fn main() -> Result<(), Error> {
         let mut encoder = AudioEncoder::new().unwrap();
 
         loop {
-            println!("Se va luquitas");
+            //println!("Se va luquitas");
             //TODO: unwraps
             let data = rx.recv().unwrap();
             let encoded_data = match encoder.encode(data) {

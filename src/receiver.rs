@@ -4,13 +4,15 @@ pub mod webrtcommunication;
 
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 
 use tokio::sync::Notify;
 
+use webrtc::data_channel::data_channel_message::DataChannelMessage;
+use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{
     api::media_engine::MIME_TYPE_OPUS, ice_transport::ice_connection_state::RTCIceConnectionState,
@@ -51,6 +53,71 @@ async fn main() -> Result<(), Error> {
     // an ivf file, since we could have multiple video tracks we provide a counter.
     // In your application this is where you would handle/process video
     set_on_track_handler(&peer_connection, notify_rx, tx_decoder_1);
+
+    // Register data channel creation handling
+    peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
+        let d_label = d.label().to_owned();
+        let d_id = d.id();
+        println!("New DataChannel {d_label} {d_id}");
+
+        // Register channel opening handling
+        Box::pin(async move {
+            let d2 = Arc::clone(&d);
+            let d_label2 = d_label.clone();
+            let d_id2 = d_id;
+            d.on_close(Box::new(move || {
+                println!("Data channel closed");
+                Box::pin(async {})
+            }));
+
+            // d.on_open(Box::new(move || {
+            //     println!("Data channel '{d_label2}'-'{d_id2}' open. Random messages will now be sent to any connected DataChannels every 5 seconds");
+
+            //     Box::pin(async move {
+            //         let mut result = Result::<usize>::Ok(0);
+            //         while result.is_ok() {
+            //             let timeout = tokio::time::sleep(Duration::from_secs(5));
+            //             tokio::pin!(timeout);
+
+            //             tokio::select! {
+            //                 _ = timeout.as_mut() =>{
+            //                     let message = math_rand_alpha(15);
+            //                     println!("Sending '{message}'");
+            //                     result = d2.send_text(message).await.map_err(Into::into);
+            //                 }
+            //             };
+            //         }
+            //     })
+            // }));
+
+            // Register text message handling
+            d.on_message(Box::new(move |msg: DataChannelMessage| {
+                let msg_str = String::from_utf8(msg.data.to_vec()).unwrap();
+                // Parse the received time from the message
+                let received_time = match msg_str.parse::<u64>() {
+                    Ok(nanos) => UNIX_EPOCH + std::time::Duration::from_nanos(nanos),
+                    Err(_) => {
+                        println!("Failed to parse the received time");
+                        return Box::pin(async {});
+                    }
+                };
+                println!("Received time: '{:?}'", received_time);
+                let actual_time = SystemTime::now();
+                println!("Actual time: '{:?}'", actual_time);
+
+                // Calculate the difference in nanoseconds
+                match actual_time.duration_since(received_time) {
+                    Ok(duration) => println!(
+                        "Difference: {} nanoseconds {} miliseconds",
+                        duration.as_nanos(),
+                        duration.as_nanos() / 1000000
+                    ),
+                    Err(_) => println!("Received time is later than actual time"),
+                }
+                Box::pin(async {})
+            }));
+        })
+    }));
 
     // Allow us to receive 1 audio track
     if let Err(_) = peer_connection
@@ -207,7 +274,7 @@ async fn read_track(
         tokio::select! {
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
-                    println!("Llega Luquitas");
+                    //println!("Llega Luquitas");
                     let value = decoder.decode(rtp_packet.payload.to_vec()).unwrap();
                     for v in value {
                         let _ = tx.try_send(v);

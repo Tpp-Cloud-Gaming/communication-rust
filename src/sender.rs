@@ -2,11 +2,12 @@ pub mod audio;
 pub mod utils;
 pub mod webrtcommunication;
 
+use chrono::prelude::*;
 use std::io::{Error, ErrorKind};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use crate::audio::audio_capture::AudioCapture;
 use crate::audio::audio_encoder::AudioEncoder;
@@ -78,14 +79,9 @@ async fn main() -> Result<(), Error> {
 
                 tokio::select! {
                     _ = timeout.as_mut() => {
-                        let actual_time = SystemTime::now();
-                        let since_the_epoch = actual_time
-                            .duration_since(SystemTime::UNIX_EPOCH)
-                            .expect("Time went backwards");
-                        let nanos = since_the_epoch.as_nanos(); // Get the time in nanoseconds
-                        let nanos_str = format!("{}", nanos); // Convert nanoseconds to String
-                        println!("Sending '{:?}'", nanos);
-                        d2.send_text(nanos_str).await.unwrap();
+                        let utc: DateTime<Utc> = Utc::now();
+                        println!("Sending '{:?}'", utc);
+                        d2.send_text(utc.to_rfc3339()).await.unwrap();
                     }
                 };
             }

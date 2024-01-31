@@ -2,12 +2,12 @@ pub mod audio;
 pub mod utils;
 pub mod webrtcommunication;
 
-use std::io::{Error, ErrorKind};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use chrono::prelude::*;
+use std::io::{Error, ErrorKind};
+use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::Notify;
 
@@ -70,50 +70,26 @@ async fn main() -> Result<(), Error> {
                 Box::pin(async {})
             }));
 
-            // d.on_open(Box::new(move || {
-            //     println!("Data channel '{d_label2}'-'{d_id2}' open. Random messages will now be sent to any connected DataChannels every 5 seconds");
-
-            //     Box::pin(async move {
-            //         let mut result = Result::<usize>::Ok(0);
-            //         while result.is_ok() {
-            //             let timeout = tokio::time::sleep(Duration::from_secs(5));
-            //             tokio::pin!(timeout);
-
-            //             tokio::select! {
-            //                 _ = timeout.as_mut() =>{
-            //                     let message = math_rand_alpha(15);
-            //                     println!("Sending '{message}'");
-            //                     result = d2.send_text(message).await.map_err(Into::into);
-            //                 }
-            //             };
-            //         }
-            //     })
-            // }));
-
             // Register text message handling
             d.on_message(Box::new(move |msg: DataChannelMessage| {
                 let msg_str = String::from_utf8(msg.data.to_vec()).unwrap();
-                // Parse the received time from the message
-                let received_time = match msg_str.parse::<u64>() {
-                    Ok(nanos) => UNIX_EPOCH + std::time::Duration::from_nanos(nanos),
+                let received_time = match DateTime::parse_from_rfc3339(&msg_str) {
+                    Ok(time) => time.with_timezone(&Utc),
                     Err(_) => {
                         println!("Failed to parse the received time");
                         return Box::pin(async {});
                     }
                 };
-                println!("Received time: '{:?}'", received_time);
-                let actual_time = SystemTime::now();
-                println!("Actual time: '{:?}'", actual_time);
-
-                // Calculate the difference in nanoseconds
-                match actual_time.duration_since(received_time) {
-                    Ok(duration) => println!(
-                        "Difference: {} nanoseconds {} miliseconds",
-                        duration.as_nanos(),
-                        duration.as_nanos() / 1000000
-                    ),
-                    Err(_) => println!("Received time is later than actual time"),
-                }
+                println!("Received time: '{:?}'", msg_str);
+                let utc: DateTime<Utc> = Utc::now();
+                println!("Actual time: '{:?}'", utc);
+                let duration = utc.signed_duration_since(received_time);
+                let milliseconds = duration.num_milliseconds();
+                let nanoseconds = duration.num_nanoseconds().unwrap_or(0);
+                println!(
+                    "Difference: {} milliseconds, {} nanoseconds",
+                    milliseconds, nanoseconds
+                );
                 Box::pin(async {})
             }));
         })

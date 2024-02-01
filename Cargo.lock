@@ -179,6 +179,7 @@ dependencies = [
  "openh264",
  "opus-rust",
  "serde_json",
+ "sntpc",
  "tokio",
  "webrtc",
  "windows-capture",
@@ -1198,6 +1199,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "no-std-net"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43794a0ace135be66a25d3ae77d41b91615fb68ae937f904090203e81f755b65"
+
+[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1930,6 +1937,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74212e6bbe9a4352329b2f68ba3130c15a3f26fe88ff22dbdc6cdd58fa85e99c"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "sntpc"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "629a9f38f83d7b8a14c702deecc8e431220b1570d3d927daa567b87d69346524"
+dependencies = [
+ "no-std-net",
 ]
 
 [[package]]

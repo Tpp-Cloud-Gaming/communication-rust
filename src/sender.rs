@@ -4,6 +4,7 @@ pub mod webrtcommunication;
 
 use chrono::prelude::*;
 use std::io::{Error, ErrorKind};
+use std::net::UdpSocket;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
@@ -66,6 +67,11 @@ async fn main() -> Result<(), Error> {
         }
     };
     println!("Data channel created");
+
+    let socket = UdpSocket::bind("0.0.0.0:0").expect("Unable to create UDP socket");
+    socket
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .expect("Unable to set UDP socket read timeout");
     // Register channel opening handling
     let d1 = Arc::clone(&latency_channel);
     latency_channel.on_open(Box::new(move || {
@@ -75,13 +81,14 @@ async fn main() -> Result<(), Error> {
         Box::pin(async move {
             loop {
                 let timeout = tokio::time::sleep(Duration::from_secs(2));
+                let socket_cpy = socket.try_clone().unwrap();
                 tokio::pin!(timeout);
 
                 tokio::select! {
                     _ = timeout.as_mut() => {
-                        let utc: DateTime<Utc> = Utc::now();
-                        println!("Sending '{:?}'", utc);
-                        d2.send_text(utc.to_rfc3339()).await.unwrap();
+                        let time = get_time(socket_cpy).unwrap();
+                        println!("Sending '{:?}'", time);
+                        d2.send_text(time.to_string()).await.unwrap();
                     }
                 };
             }
@@ -257,4 +264,12 @@ async fn create_tracks(
         }
     };
     Ok(rtp_sender)
+}
+
+fn get_time(socket: UdpSocket) -> Result<u32, Error> {
+    let result = sntpc::simple_get_time("pool.ntp.org:123", socket).unwrap(); //TODO: sacar unwrap
+
+    println!("rtt {}, seconds {}", result.roundtrip(), result.sec());
+
+    Ok(sntpc::fraction_to_nanoseconds(result.sec_fraction()) - (result.roundtrip() * 1000) as u32)
 }

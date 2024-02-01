@@ -5,7 +5,9 @@ pub mod webrtcommunication;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use chrono::prelude::*;
+use sntpc::fraction_to_nanoseconds;
 use std::io::{Error, ErrorKind};
+use std::net::UdpSocket;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -70,26 +72,21 @@ async fn main() -> Result<(), Error> {
                 Box::pin(async {})
             }));
 
+            let socket = UdpSocket::bind("0.0.0.0:0").expect("Unable to create UDP socket");
+            socket
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("Unable to set UDP socket read timeout");
+
             // Register text message handling
             d.on_message(Box::new(move |msg: DataChannelMessage| {
+                let socket_cpy = socket.try_clone().unwrap();
                 let msg_str = String::from_utf8(msg.data.to_vec()).unwrap();
-                let received_time = match DateTime::parse_from_rfc3339(&msg_str) {
-                    Ok(time) => time.with_timezone(&Utc),
-                    Err(_) => {
-                        println!("Failed to parse the received time");
-                        return Box::pin(async {});
-                    }
-                };
-                println!("Received time: '{:?}'", msg_str);
-                let utc: DateTime<Utc> = Utc::now();
-                println!("Actual time: '{:?}'", utc);
-                let duration = utc.signed_duration_since(received_time);
-                let milliseconds = duration.num_milliseconds();
-                let nanoseconds = duration.num_nanoseconds().unwrap_or(0);
-                println!(
-                    "Difference: {} milliseconds, {} nanoseconds",
-                    milliseconds, nanoseconds
-                );
+                let rec_time = msg_str.parse::<u32>().unwrap();
+                println!("Received time: '{:?}'", rec_time);
+                let time = get_time(socket_cpy).unwrap();
+                println!("Actual time: '{:?}'", time);
+                let diff = (time - rec_time) / 1000000 as u32;
+                println!("Difference: {} milliseconds", diff);
                 Box::pin(async {})
             }));
         })
@@ -267,4 +264,12 @@ async fn read_track(
             }
         }
     }
+}
+
+fn get_time(socket: UdpSocket) -> Result<u32, Error> {
+    let result = sntpc::simple_get_time("pool.ntp.org:123", socket).unwrap(); //TODO: sacar unwrap
+
+    println!("rtt {}, seconds {}", result.roundtrip(), result.sec());
+
+    Ok(sntpc::fraction_to_nanoseconds(result.sec_fraction()) - (result.roundtrip() * 1000) as u32)
 }

@@ -4,16 +4,12 @@ pub mod webrtcommunication;
 
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use chrono::prelude::*;
-use sntpc::fraction_to_nanoseconds;
 use std::io::{Error, ErrorKind};
-use std::net::UdpSocket;
 use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::Notify;
 
-use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{
@@ -28,9 +24,10 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use cpal::traits::StreamTrait;
 
 use crate::audio::audio_decoder::AudioDecoder;
-use crate::webrtcommunication::communication::Communication;
-
+use crate::utils::latency_const::LATENCY_CHANNEL_LABEL;
 use crate::utils::webrtc_const::{ENCODE_BUFFER_SIZE, STUN_ADRESS};
+use crate::webrtcommunication::communication::Communication;
+use crate::webrtcommunication::latency::Latency;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -56,41 +53,7 @@ async fn main() -> Result<(), Error> {
     // In your application this is where you would handle/process video
     set_on_track_handler(&peer_connection, notify_rx, tx_decoder_1);
 
-    // Register data channel creation handling
-    peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
-        let d_label = d.label().to_owned();
-        let d_id = d.id();
-        println!("New DataChannel {d_label} {d_id}");
-
-        // Register channel opening handling
-        Box::pin(async move {
-            let d2 = Arc::clone(&d);
-            let d_label2 = d_label.clone();
-            let d_id2 = d_id;
-            d.on_close(Box::new(move || {
-                println!("Data channel closed");
-                Box::pin(async {})
-            }));
-
-            let socket = UdpSocket::bind("0.0.0.0:0").expect("Unable to create UDP socket");
-            socket
-                .set_read_timeout(Some(Duration::from_secs(2)))
-                .expect("Unable to set UDP socket read timeout");
-
-            // Register text message handling
-            d.on_message(Box::new(move |msg: DataChannelMessage| {
-                let socket_cpy = socket.try_clone().unwrap();
-                let msg_str = String::from_utf8(msg.data.to_vec()).unwrap();
-                let rec_time = msg_str.parse::<u32>().unwrap();
-                println!("Received time: '{:?}'", rec_time);
-                let time = get_time(socket_cpy).unwrap();
-                println!("Actual time: '{:?}'", time);
-                let diff = (time - rec_time) / 1000000 as u32;
-                println!("Difference: {} milliseconds", diff);
-                Box::pin(async {})
-            }));
-        })
-    }));
+    channel_handler(&peer_connection);
 
     // Allow us to receive 1 audio track
     if let Err(_) = peer_connection
@@ -266,10 +229,20 @@ async fn read_track(
     }
 }
 
-fn get_time(socket: UdpSocket) -> Result<u32, Error> {
-    let result = sntpc::simple_get_time("pool.ntp.org:123", socket).unwrap(); //TODO: sacar unwrap
+fn channel_handler(peer_connection: &Arc<RTCPeerConnection>) {
+    // Register data channel creation handling
+    peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
+        let d_label = d.label().to_owned();
 
-    println!("rtt {}, seconds {}", result.roundtrip(), result.sec());
-
-    Ok(sntpc::fraction_to_nanoseconds(result.sec_fraction()) - (result.roundtrip() * 1000) as u32)
+        if d_label == LATENCY_CHANNEL_LABEL {
+            Box::pin(async move {
+                // Start the latency measurement
+                Latency::start_latency_receiver(d).await.unwrap(); //TODO: sacar unwrap
+            })
+        } else {
+            Box::pin(async move {
+                println!("RECEIVER | New DataChannel has been opened | {d_label}");
+            })
+        }
+    }));
 }

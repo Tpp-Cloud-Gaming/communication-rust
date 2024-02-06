@@ -2,9 +2,7 @@ pub mod audio;
 pub mod utils;
 pub mod webrtcommunication;
 
-use chrono::prelude::*;
 use std::io::{Error, ErrorKind};
-use std::net::UdpSocket;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
@@ -24,13 +22,14 @@ use webrtc::api::media_engine::MIME_TYPE_OPUS;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::media::Sample;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
-use webrtc::peer_connection::{self, RTCPeerConnection};
+use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::rtp_transceiver::rtp_sender::RTCRtpSender;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 use webrtc::track::track_local::TrackLocal;
 
 use crate::utils::webrtc_const::{CHANNELS, SAMPLE_RATE, STREAM_TRACK_ID, STUN_ADRESS, TRACK_ID};
+use crate::webrtcommunication::latency::Latency;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -57,43 +56,8 @@ async fn main() -> Result<(), Error> {
     let pc = comunication.get_peer();
     let audio_track = create_audio_track();
 
-    let latency_channel = match pc.create_data_channel("latency", None).await {
-        Ok(ch) => ch,
-        Err(_) => {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "Error creating latency data channel",
-            ))
-        }
-    };
-    println!("Data channel created");
-
-    let socket = UdpSocket::bind("0.0.0.0:0").expect("Unable to create UDP socket");
-    socket
-        .set_read_timeout(Some(Duration::from_secs(2)))
-        .expect("Unable to set UDP socket read timeout");
-    // Register channel opening handling
-    let d1 = Arc::clone(&latency_channel);
-    latency_channel.on_open(Box::new(move || {
-        println!("Data channel '{}'-'{}' open. Random messages will now be sent to any connected DataChannels every 2 seconds", d1.label(), d1.id());
-
-        let d2 = Arc::clone(&d1);
-        Box::pin(async move {
-            loop {
-                let timeout = tokio::time::sleep(Duration::from_secs(2));
-                let socket_cpy = socket.try_clone().unwrap();
-                tokio::pin!(timeout);
-
-                tokio::select! {
-                    _ = timeout.as_mut() => {
-                        let time = get_time(socket_cpy).unwrap();
-                        println!("Sending '{:?}'", time);
-                        d2.send_text(time.to_string()).await.unwrap();
-                    }
-                };
-            }
-        })
-    }));
+    // Start the latency measurement
+    Latency::start_latency_sender(pc.clone()).await?;
 
     //let rtp_sender = create_tracks(&pc, audio_track.clone()).await?;
     let rtp_sender = match pc
@@ -264,12 +228,4 @@ async fn create_tracks(
         }
     };
     Ok(rtp_sender)
-}
-
-fn get_time(socket: UdpSocket) -> Result<u32, Error> {
-    let result = sntpc::simple_get_time("pool.ntp.org:123", socket).unwrap(); //TODO: sacar unwrap
-
-    println!("rtt {}, seconds {}", result.roundtrip(), result.sec());
-
-    Ok(sntpc::fraction_to_nanoseconds(result.sec_fraction()) - (result.roundtrip() * 1000) as u32)
 }

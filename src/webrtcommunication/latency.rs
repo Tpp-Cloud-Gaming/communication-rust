@@ -116,8 +116,8 @@ impl Latency {
                 };
                 //println!("Actual time: '{:?}'", time);
                 //convert the difference to milliseconds
-                let diff = (time - rec_time) / 1000000 as u32;
-                //println!("Difference: {} milliseconds", diff);
+                let diff = (time - rec_time) as u32;
+                println!("Difference: {} milliseconds", diff);
             })
         }));
 
@@ -134,6 +134,7 @@ fn create_socket(address: &str, timeout: Duration) -> Result<UdpSocket, Error> {
 }
 
 fn get_time(socket: UdpSocket) -> Result<u32, Error> {
+    //TODO: handlear errores de server
     let result = match sntpc::simple_get_time(SNTP_POOL_ADDR, socket) {
         Ok(r) => r,
         Err(e) => {
@@ -142,7 +143,18 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
         }
     };
     //DESCOMENTAR PARA VER CUANTO TARDA EL RTT Y LA HORA QUE RECIBE
-    //println!("rtt {}, seconds {}", result.roundtrip(), result.sec());
+    let secs_str = result.sec().to_string();
+    let last_two_digits_str = &secs_str[secs_str.len() - 2..];
+    let last_two_digits = last_two_digits_str.parse::<u32>().unwrap();
 
-    Ok(sntpc::fraction_to_nanoseconds(result.sec_fraction()) - (result.roundtrip() * 1000) as u32)
+    //TODO: arreglar
+    if last_two_digits == 0 {
+        return Ok(0);
+    }
+
+    //TODO: Verificar que no haya overflow
+    Ok(
+        (last_two_digits * 1000 + sntpc::fraction_to_milliseconds(result.sec_fraction()))
+            - (result.roundtrip() / 1000) as u32,
+    )
 }

@@ -35,7 +35,7 @@ impl AudioCapture {
             Err(_) => {
                 return Err(Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Error getting device name"),
+                    "Error getting device name".to_string(),
                 ))
             }
         };
@@ -81,7 +81,7 @@ impl AudioCapture {
                 Err(_) => {
                     return Err(Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Error writing input data"),
+                        "Error writing input data".to_string(),
                     ))
                 }
             },
@@ -95,7 +95,7 @@ impl AudioCapture {
                 Err(_) => {
                     return Err(Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Error writing input data"),
+                        "Error writing input data".to_string(),
                     ))
                 }
             },
@@ -109,7 +109,7 @@ impl AudioCapture {
                 Err(_) => {
                     return Err(Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Error writing input data"),
+                        "Error writing input data".to_string(),
                     ))
                 }
             },
@@ -123,7 +123,7 @@ impl AudioCapture {
                 Err(_) => {
                     return Err(Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Error writing input data"),
+                        "Error writing input data".to_string(),
                     ))
                 }
             },
@@ -136,22 +136,25 @@ impl AudioCapture {
         };
 
         match stream.play() {
-            Ok(_) => return Ok(stream),
-            Err(_) => {
-                return Err(Error::new(
-                    std::io::ErrorKind::Other,
-                    "Error playing stream",
-                ))
-            }
-        };
+            Ok(_) => Ok(stream),
+            Err(_) => Err(Error::new(
+                std::io::ErrorKind::Other,
+                "Error playing stream",
+            )),
+        }
     }
 
     /// Stops audio capture.
     pub fn stop(&mut self) -> Result<(), Error> {
-        match self.stream.take() {
-            Some(stream) => drop(stream),
-            None => {}
-        };
+        if let Some(stream) = self.stream.take() {
+            drop(stream);
+        } else {
+            return Err(Error::new(
+                std::io::ErrorKind::Other,
+                "Error stopping stream",
+            ));
+        }
+
         Ok(())
     }
 }
@@ -168,12 +171,10 @@ where
     U: Sample + hound::Sample + FromSample<T>,
 {
     match sender.send(input.to_vec()) {
-        Ok(_) => return Ok(()),
-        Err(_) => {
-            return Err(Error::new(
-                std::io::ErrorKind::Other,
-                format!("Error writing input data"),
-            ))
-        }
+        Ok(_) => Ok(()),
+        Err(_) => Err(Error::new(
+            std::io::ErrorKind::Other,
+            "Error writing input data".to_string(),
+        )),
     }
 }

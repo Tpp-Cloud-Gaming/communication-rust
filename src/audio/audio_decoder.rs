@@ -16,11 +16,11 @@ impl AudioDecoder {
             Err(_) => {
                 return Err(Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Error creating opus decoder"),
+                    "Error creating opus decoder".to_string(),
                 ))
             }
         };
-        Ok(Self { decoder: decoder })
+        Ok(Self { decoder })
     }
 
     /// Returns a decoded opus sample as a Vec<f32>

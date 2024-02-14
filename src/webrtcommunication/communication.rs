@@ -1,4 +1,4 @@
-use crate::utils::utils::must_read_stdin;
+use crate::utils::common_utils::must_read_stdin;
 
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
@@ -57,7 +57,12 @@ impl Communication {
         let desc_data = decode(line.as_str())?;
         let offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
         // Set the remote SessionDescription
-        if let Err(_) = self.peer_connection.set_remote_description(offer).await {
+        if self
+            .peer_connection
+            .set_remote_description(offer)
+            .await
+            .is_err()
+        {
             return Err(Error::new(
                 ErrorKind::Other,
                 "Error setting remote description",
@@ -73,7 +78,7 @@ impl Communication {
 
 fn create_api() -> Result<API, Error> {
     let mut m = MediaEngine::default();
-    if let Err(val) = m.register_codec(
+    if let Err(_val) = m.register_codec(
         RTCRtpCodecParameters {
             capability: RTCRtpCodecCapability {
                 mime_type: MIME_TYPE_OPUS.to_owned(),
@@ -107,7 +112,7 @@ fn create_api() -> Result<API, Error> {
         .with_media_engine(m)
         .with_interceptor_registry(registry)
         .build();
-    return Ok(api);
+    Ok(api)
 }
 
 fn decode(s: &str) -> Result<String, Error> {
@@ -117,8 +122,8 @@ fn decode(s: &str) -> Result<String, Error> {
     };
 
     match String::from_utf8(b) {
-        Ok(s) => return Ok(s),
-        Err(_) => return Err(Error::new(ErrorKind::Other, "Error decoding utf8")),
+        Ok(s) => Ok(s),
+        Err(_) => Err(Error::new(ErrorKind::Other, "Error decoding utf8")),
     }
 }
 

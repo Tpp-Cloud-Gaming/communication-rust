@@ -24,7 +24,6 @@ use webrtc::media::Sample;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
-use webrtc::rtp_transceiver::rtp_sender::RTCRtpSender;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 use webrtc::track::track_local::TrackLocal;
 
@@ -49,7 +48,7 @@ async fn main() -> Result<(), Error> {
     let notify_audio = notify_tx.clone();
 
     //NO BORRAR
-    let stream = audio_capture.start()?;
+    let _stream = audio_capture.start()?;
     //stream.play().unwrap();
 
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -89,8 +88,6 @@ async fn main() -> Result<(), Error> {
         let mut encoder = AudioEncoder::new().unwrap();
 
         loop {
-            //println!("Se va luquitas");
-            //TODO: unwraps
             let data = rx.recv().unwrap();
             let encoded_data = match encoder.encode(data) {
                 Ok(d) => d,
@@ -104,7 +101,7 @@ async fn main() -> Result<(), Error> {
 
             if let Err(err) = audio_track
                 .write_sample(&Sample {
-                    data: encoded_data.try_into().unwrap(),
+                    data: encoded_data.into(),
                     duration: sample_duration,
                     ..Default::default()
                 })
@@ -138,7 +135,7 @@ async fn main() -> Result<(), Error> {
 
     if let Some(local_desc) = pc.local_description().await {
         let json_str = serde_json::to_string(&local_desc)?;
-        let b64 = BASE64_STANDARD.encode(&json_str);
+        let b64 = BASE64_STANDARD.encode(json_str);
         println!("{b64}");
     } else {
         log::error!("SENDER | Generate local_description failed");
@@ -156,7 +153,7 @@ async fn main() -> Result<(), Error> {
         }
     };
 
-    if let Err(_) = pc.close().await {
+    if pc.close().await.is_err() {
         return Err(Error::new(
             ErrorKind::Other,
             "Error closing peer connection",
@@ -209,24 +206,4 @@ fn set_peer_events(
 
         Box::pin(async {})
     }));
-}
-
-async fn create_tracks(
-    pc: &Arc<RTCPeerConnection>,
-    audio_track: Arc<TrackLocalStaticSample>,
-) -> Result<(Arc<RTCRtpSender>), Error> {
-    // // Add this newly created track to the PeerConnection
-    let rtp_sender = match pc
-        .add_track(Arc::clone(&audio_track) as Arc<dyn TrackLocal + Send + Sync>)
-        .await
-    {
-        Ok(rtp_sender) => rtp_sender,
-        Err(_) => {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "Error setting local description",
-            ))
-        }
-    };
-    Ok(rtp_sender)
 }

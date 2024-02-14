@@ -16,7 +16,7 @@ impl AudioEncoder {
             opus::Encoder::new(SAMPLE_RATE, opus::Channels::Stereo, opus::Application::Voip)
                 .unwrap();
 
-        Ok(Self { encoder: encoder })
+        Ok(Self { encoder })
     }
 
     pub fn encode(&mut self, data: Vec<f32>) -> Result<Vec<u8>, opus::Error> {

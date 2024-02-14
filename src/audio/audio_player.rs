@@ -60,10 +60,7 @@ impl AudioPlayer {
 
 fn write_data(output: &mut [f32], rx: Arc<Mutex<Receiver<f32>>>) {
     for sample in output {
-        let data = match rx.lock().unwrap().try_recv() {
-            Ok(sample) => sample,
-            Err(_) => 0.0,
-        };
+        let data = rx.lock().unwrap().try_recv().unwrap_or(0.0);
         *sample = data;
     }
 }

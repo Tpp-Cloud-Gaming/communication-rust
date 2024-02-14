@@ -9,7 +9,7 @@ pub fn search_device(name: String) -> Result<Device, Error> {
     let host = cpal::default_host();
 
     // Set up the input device and stream with the default input config.
-    let mut device = match host.default_input_device() {
+    let mut _device = match host.default_input_device() {
         Some(device) => device,
         None => {
             return Err(Error::new(
@@ -36,10 +36,10 @@ pub fn search_device(name: String) -> Result<Device, Error> {
         };
 
         if actual_name.contains(&name) {
-            device = actual_device;
+            _device = actual_device;
             // TODO: este break puede generar error !!!
             break;
         }
     }
-    return Ok(host.default_output_device().unwrap());
+    Ok(host.default_output_device().unwrap())
 }

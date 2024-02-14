@@ -22,18 +22,9 @@ sntpc = "0.3.7"
 env_logger = "0.10.0"
 
  [[bin]]
- name = "Sender"
+ name = "sender"
  path = "src/sender.rs"
 
  [[bin]]
- name = "Receiver"
+ name = "receiver"
  path = "src/receiver.rs"
-
- [[bin]]
- name = "Main"
- path = "src/main.rs"
-
- [[bin]]
- name = "Video"
- path = "src/video/video_capture.rs"
-

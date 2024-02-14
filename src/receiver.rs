@@ -59,9 +59,10 @@ async fn main() -> Result<(), Error> {
     channel_handler(&peer_connection);
 
     // Allow us to receive 1 audio track
-    if let Err(_) = peer_connection
+    if peer_connection
         .add_transceiver_from_kind(RTPCodecType::Audio, None)
         .await
+        .is_err()
     {
         return Err(Error::new(
             ErrorKind::Other,
@@ -90,7 +91,7 @@ async fn main() -> Result<(), Error> {
     let mut gather_complete = peer_connection.gathering_complete_promise().await;
 
     // Sets the LocalDescription, and starts our UDP listeners
-    if let Err(_) = peer_connection.set_local_description(answer).await {
+    if peer_connection.set_local_description(answer).await.is_err() {
         return Err(Error::new(
             ErrorKind::Other,
             "Error setting local description",
@@ -106,7 +107,7 @@ async fn main() -> Result<(), Error> {
     if let Some(local_desc) = peer_connection.local_description().await {
         // IMPRIMIR SDP EN BASE64
         let json_str = serde_json::to_string(&local_desc)?;
-        let b64 = BASE64_STANDARD.encode(&json_str);
+        let b64 = BASE64_STANDARD.encode(json_str);
         println!("{b64}");
     } else {
         log::error!("RECEIVER | Generate local_description failed!");
@@ -123,7 +124,7 @@ async fn main() -> Result<(), Error> {
         }
     };
 
-    if let Err(_) = peer_connection.close().await {
+    if peer_connection.close().await.is_err() {
         return Err(Error::new(
             ErrorKind::Other,
             "Error closing peer connection",
@@ -138,7 +139,7 @@ fn set_on_track_handler(
     notify_rx: Arc<Notify>,
     tx_decoder_1: Sender<f32>,
 ) {
-    let pc = Arc::downgrade(&peer_connection);
+    let pc = Arc::downgrade(peer_connection);
 
     peer_connection.on_track(Box::new(move |track, _, _| {
         // Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval

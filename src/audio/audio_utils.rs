@@ -1,6 +1,9 @@
 use std::io::Error;
 
-use cpal::{Device, traits::{HostTrait, DeviceTrait}};
+use cpal::{
+    traits::{DeviceTrait, HostTrait},
+    Device,
+};
 
 pub fn search_device(name: String) -> Result<Device, Error> {
     let host = cpal::default_host();
@@ -38,5 +41,5 @@ pub fn search_device(name: String) -> Result<Device, Error> {
             break;
         }
     }
-    return Ok(device);
+    return Ok(host.default_output_device().unwrap());
 }

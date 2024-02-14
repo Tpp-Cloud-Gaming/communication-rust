@@ -31,6 +31,9 @@ use crate::webrtcommunication::latency::Latency;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    // Initialize Log:
+    env_logger::builder().format_target(false).init();
+
     let (tx_decoder_1, rx_decoder_1): (Sender<f32>, Receiver<f32>) =
         tokio::sync::mpsc::channel(ENCODE_BUFFER_SIZE);
     let audio_player = audio::audio_player::AudioPlayer::new(
@@ -115,6 +118,7 @@ async fn main() -> Result<(), Error> {
             log::info!("RECEIVER | Received done signal");
         }
         _ = tokio::signal::ctrl_c() => {
+            log::info!("RECEIVER | Received done signal222");
             println!();
         }
     };

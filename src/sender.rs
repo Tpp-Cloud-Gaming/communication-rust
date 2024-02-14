@@ -34,6 +34,7 @@ use crate::webrtcommunication::latency::Latency;
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     //Create video frames channels
+    env_logger::builder().format_target(false).init();
 
     let (tx, rx): (Sender<Vec<f32>>, Receiver<Vec<f32>>) = mpsc::channel();
 

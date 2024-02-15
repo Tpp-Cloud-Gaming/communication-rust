@@ -181,9 +181,10 @@ fn get_time_from_sntp(socket: UdpSocket) -> Result<NtpResult, Error> {
 
     // If http request fails, retry max_retry times
     while retry < MAX_SNTP_RETRY {
+        //TODO:unwrap
         if let Ok(r) = sntpc::simple_get_time(SNTP_POOL_ADDR, socket.try_clone().unwrap()) {
-            retry = MAX_SNTP_RETRY;
             result = r;
+            break;
         } else {
             retry += 1;
             sleep(Duration::from_millis(SNTP_SEND_SLEEP));

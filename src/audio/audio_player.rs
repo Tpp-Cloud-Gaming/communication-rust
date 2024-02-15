@@ -7,14 +7,23 @@ use std::{
 };
 use tokio::sync::mpsc::Receiver;
 
+/// Struct to play audio samples
 pub struct AudioPlayer {
+    /// Receiver of the audio samples
     rx: Arc<Mutex<Receiver<f32>>>,
+    /// Audio device
     device: Device,
+    /// Audio device config
     config: cpal::StreamConfig,
+    /// Audio sample format
     sample_format: SampleFormat,
 }
 
 impl AudioPlayer {
+    /// Returns new instance of AudioPlayer.
+    /// # Arguments
+    /// * `device` - String that represents the name of the audio device
+    /// * `rx` - Arc<Mutex<Receiver<f32>>> that represents the receiver of the audio samples 
     pub fn new(device: &str, rx: Arc<Mutex<Receiver<f32>>>) -> Result<Self, Error> {
         let device = search_device(device.to_owned()).unwrap();
         let config = device.default_output_config().unwrap();
@@ -27,7 +36,9 @@ impl AudioPlayer {
             sample_format,
         })
     }
-
+    /// Start the audio player
+    /// # Returns
+    /// * `Stream` - The audio stream  
     pub fn start(&self) -> Result<Stream, Error> {
         let err_fn = |err| eprintln!("an error occurred on the output audio stream: {}", err);
         let rx_clone = self.rx.clone();
@@ -58,6 +69,10 @@ impl AudioPlayer {
     }
 }
 
+/// Write the audio data to the output
+/// # Arguments
+/// * `output` - &mut [f32] that represents the output audio samples
+/// * `rx` - Arc<Mutex<Receiver<f32>>> that represents the receiver of the audio samples
 fn write_data(output: &mut [f32], rx: Arc<Mutex<Receiver<f32>>>) {
     for sample in output {
         let data = rx.lock().unwrap().try_recv().unwrap_or(0.0);

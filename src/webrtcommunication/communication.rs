@@ -115,6 +115,12 @@ fn create_api() -> Result<API, Error> {
     Ok(api)
 }
 
+
+/// Decode a base64 string
+/// # Arguments
+/// * `s` - &str that represents the base64 string
+/// # Returns
+/// * Result<String, Error> - The decoded string
 fn decode(s: &str) -> Result<String, Error> {
     let b = match BASE64_STANDARD.decode(s) {
         Ok(b) => b,

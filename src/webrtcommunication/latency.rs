@@ -195,5 +195,5 @@ fn get_time_from_sntp(socket: UdpSocket) -> Result<NtpResult, Error> {
             "Error getting time from SNTP server",
         ));
     }
-    return Ok(result);
+    Ok(result)
 }

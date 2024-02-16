@@ -22,10 +22,10 @@ pub struct AudioPlayer {
 impl AudioPlayer {
     /// Returns new instance of AudioPlayer.
     /// # Arguments
-    /// * `device` - String that represents the name of the audio device
-    /// * `rx` - Arc<Mutex<Receiver<f32>>> that represents the receiver of the audio samples 
-    pub fn new(device: &str, rx: Arc<Mutex<Receiver<f32>>>) -> Result<Self, Error> {
-        let device = search_device(device.to_owned()).unwrap();
+    /// * `device` - An optional string that represents the device name
+    /// * `rx` - Arc<Mutex<Receiver<f32>>> that represents the receiver of the audio samples
+    pub fn new(device: Option<String>, rx: Arc<Mutex<Receiver<f32>>>) -> Result<Self, Error> {
+        let device = search_device(device)?;
         let config = device.default_output_config().unwrap();
         let sample_format = config.sample_format();
         let config: cpal::StreamConfig = config.into();

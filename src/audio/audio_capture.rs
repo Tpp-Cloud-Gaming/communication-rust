@@ -25,11 +25,12 @@ impl AudioCapture {
     ///
     /// # Arguments
     ///
-    /// * `device_name` - A string that represents the device name
+    /// * `device_name` - An optional string that represents the device name
     /// * `sender` - A channel where AudioCapture writes the output device audio data.
-    pub fn new(device_name: String, sender: Sender<Vec<f32>>) -> Result<Self, Error> {
+    pub fn new(device_name: Option<String>, sender: Sender<Vec<f32>>) -> Result<Self, Error> {
         let device = search_device(device_name)?;
 
+        // TODO: Estas lineas estan solo para el log. Revisar
         let device_name = match device.name() {
             Ok(name) => name,
             Err(_) => {
@@ -40,7 +41,7 @@ impl AudioCapture {
             }
         };
 
-        log::info!("Device find: {}", device_name);
+        log::info!("Device found: {}", device_name);
 
         let config = match device.default_output_config() {
             Ok(config) => config,

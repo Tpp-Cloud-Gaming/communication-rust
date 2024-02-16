@@ -115,7 +115,6 @@ fn create_api() -> Result<API, Error> {
     Ok(api)
 }
 
-
 /// Decode a base64 string
 /// # Arguments
 /// * `s` - &str that represents the base64 string

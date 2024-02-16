@@ -11,6 +11,7 @@ use std::time::Duration;
 use crate::audio::audio_capture::AudioCapture;
 use crate::audio::audio_encoder::AudioEncoder;
 
+use crate::utils::common_utils::get_args;
 use crate::webrtcommunication::communication::Communication;
 
 use base64::prelude::BASE64_STANDARD;
@@ -32,17 +33,18 @@ use crate::webrtcommunication::latency::Latency;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    //Create video frames channels
+    //Start log
     env_logger::builder().format_target(false).init();
 
+    //Check for CLI args
+    let audio_device = get_args();
+
+    //Create video frames channels
     let (tx, rx): (Sender<Vec<f32>>, Receiver<Vec<f32>>) = mpsc::channel();
 
     let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
-    let mut audio_capture = AudioCapture::new(
-        "Headset Earphone (G435 Wireless Gaming Headset)".to_string(),
-        tx,
-    )?;
+    let mut audio_capture = AudioCapture::new(audio_device, tx)?;
 
     let notify_tx = Arc::new(Notify::new());
     let notify_audio = notify_tx.clone();

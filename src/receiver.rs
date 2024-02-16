@@ -24,6 +24,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use cpal::traits::StreamTrait;
 
 use crate::audio::audio_decoder::AudioDecoder;
+use crate::utils::common_utils::get_args;
 use crate::utils::latency_const::LATENCY_CHANNEL_LABEL;
 use crate::utils::webrtc_const::{ENCODE_BUFFER_SIZE, STUN_ADRESS};
 use crate::webrtcommunication::communication::Communication;
@@ -34,13 +35,14 @@ async fn main() -> Result<(), Error> {
     // Initialize Log:
     env_logger::builder().format_target(false).init();
 
+    //Check for CLI args
+    let audio_device = get_args();
+
     let (tx_decoder_1, rx_decoder_1): (Sender<f32>, Receiver<f32>) =
         tokio::sync::mpsc::channel(ENCODE_BUFFER_SIZE);
-    let audio_player = audio::audio_player::AudioPlayer::new(
-        "Headset Earphone (G435 Wireless Gaming Headset)",
-        Arc::new(Mutex::new(rx_decoder_1)),
-    )
-    .unwrap();
+    let audio_player =
+        audio::audio_player::AudioPlayer::new(audio_device, Arc::new(Mutex::new(rx_decoder_1)))
+            .unwrap();
     let stream = audio_player.start().unwrap();
     stream.play().unwrap();
 

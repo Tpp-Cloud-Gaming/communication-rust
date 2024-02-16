@@ -5,41 +5,42 @@ use cpal::{
     Device,
 };
 
-pub fn search_device(name: String) -> Result<Device, Error> {
+/// Returns the audio device that matches the name or default if none
+///
+/// # Arguments
+///
+/// * `name` - An optional string that represents the device name
+pub fn search_device(name: Option<String>) -> Result<Device, Error> {
     let host = cpal::default_host();
 
-    // Set up the input device and stream with the default input config.
-    let mut _device = match host.default_input_device() {
-        Some(device) => device,
-        None => {
-            return Err(Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to get default input device",
-            ))
-        }
-    };
-
-    let output_devices = match host.output_devices() {
-        Ok(devices) => devices,
-        Err(_) => {
-            return Err(Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to get output devices",
-            ))
-        }
-    };
-
-    for actual_device in output_devices {
-        let actual_name = match actual_device.name() {
-            Ok(n) => n,
-            Err(_) => continue,
+    if let Some(name) = name {
+        let output_devices = match host.output_devices() {
+            Ok(devices) => devices,
+            Err(_) => {
+                return Err(Error::new(
+                    std::io::ErrorKind::Other,
+                    "Failed to get output devices",
+                ))
+            }
         };
 
-        if actual_name.contains(&name) {
-            _device = actual_device;
-            // TODO: este break puede generar error !!!
-            break;
+        for actual_device in output_devices {
+            let actual_name = match actual_device.name() {
+                Ok(n) => n,
+                Err(_) => continue,
+            };
+
+            if actual_name.contains(&name) {
+                return Ok(actual_device);
+            }
         }
     }
-    Ok(host.default_output_device().unwrap())
+
+    match host.default_output_device() {
+        Some(default_output_device) => Ok(default_output_device),
+        None => Err(Error::new(
+            std::io::ErrorKind::Other,
+            "Failed to get default output device",
+        )),
+    }
 }

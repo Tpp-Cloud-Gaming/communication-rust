@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 
 use cpal::{
     traits::{DeviceTrait, StreamTrait},
-    Device, FromSample, Sample, Stream, SupportedStreamConfig,
+    Device, Stream, SupportedStreamConfig,
 };
 
 use crate::audio::audio_utils::search_device;
@@ -74,7 +74,7 @@ impl AudioCapture {
         let stream = match self.config.sample_format() {
             cpal::SampleFormat::I8 => match self.device.build_input_stream(
                 &config_cpy.into(),
-                move |data, _: &_| write_input_data::<i8, i8>(data, send_cpy.clone()).unwrap(),
+                move |data, _: &_| write_input_data(data, send_cpy.clone()),
                 err_fn,
                 None,
             ) {
@@ -88,7 +88,7 @@ impl AudioCapture {
             },
             cpal::SampleFormat::I16 => match self.device.build_input_stream(
                 &config_cpy.into(),
-                move |data, _: &_| write_input_data::<i16, i16>(data, send_cpy.clone()).unwrap(),
+                move |data, _: &_| write_input_data(data, send_cpy.clone()),
                 err_fn,
                 None,
             ) {
@@ -102,7 +102,7 @@ impl AudioCapture {
             },
             cpal::SampleFormat::I32 => match self.device.build_input_stream(
                 &config_cpy.into(),
-                move |data, _: &_| write_input_data::<i32, i32>(data, send_cpy.clone()).unwrap(),
+                move |data, _: &_| write_input_data(data, send_cpy.clone()),
                 err_fn,
                 None,
             ) {
@@ -116,7 +116,7 @@ impl AudioCapture {
             },
             cpal::SampleFormat::F32 => match self.device.build_input_stream(
                 &config_cpy.into(),
-                move |data, _: &_| write_input_data::<f32, f32>(data, send_cpy.clone()).unwrap(), //TODO: sacar unwrap
+                move |data, _: &_| write_input_data(data, send_cpy.clone()),
                 err_fn,
                 None,
             ) {
@@ -166,16 +166,8 @@ impl AudioCapture {
 ///
 /// * `input` - Data to be writen
 /// * `sender` - Channel where data is writed.
-fn write_input_data<T, U>(input: &[f32], sender: Sender<Vec<f32>>) -> Result<(), Error>
-where
-    T: Sample,
-    U: Sample + hound::Sample + FromSample<T>,
-{
-    match sender.send(input.to_vec()) {
-        Ok(_) => Ok(()),
-        Err(_) => Err(Error::new(
-            std::io::ErrorKind::Other,
-            "Error writing input data".to_string(),
-        )),
+fn write_input_data(input: &[f32], sender: Sender<Vec<f32>>) {
+    if let Err(e) = sender.send(input.to_vec()) {
+        log::info!("AUDIO_CAPTURE | Error sending audio data: {}", e);
     }
 }

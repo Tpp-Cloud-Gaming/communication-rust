@@ -26,7 +26,9 @@ impl AudioPlayer {
     /// * `rx` - Arc<Mutex<Receiver<f32>>> that represents the receiver of the audio samples
     pub fn new(device: Option<String>, rx: Arc<Mutex<Receiver<f32>>>) -> Result<Self, Error> {
         let device = search_device(device)?;
-        let config = device.default_output_config().unwrap();
+        let config = device
+            .default_output_config()
+            .map_err(|e| Error::new(std::io::ErrorKind::Other, e))?;
         let sample_format = config.sample_format();
         let config: cpal::StreamConfig = config.into();
         Ok(Self {
@@ -62,8 +64,12 @@ impl AudioPlayer {
                 None,
             ),
             sample_format => panic!("Unsupported sample format '{sample_format}'"),
-        }
-        .unwrap();
+        };
+
+        let stream = match stream {
+            Ok(stream) => stream,
+            Err(e) => return Err(Error::new(std::io::ErrorKind::Other, e)),
+        };
 
         Ok(stream)
     }
@@ -75,7 +81,15 @@ impl AudioPlayer {
 /// * `rx` - Arc<Mutex<Receiver<f32>>> that represents the receiver of the audio samples
 fn write_data(output: &mut [f32], rx: Arc<Mutex<Receiver<f32>>>) {
     for sample in output {
-        let data = rx.lock().unwrap().try_recv().unwrap_or(0.0);
+        let mut rx_lock = match rx.lock() {
+            Ok(r) => r,
+            Err(e) => {
+                log::error!("Error locking the receiver: {:?}", e);
+                return;
+            }
+        };
+
+        let data = rx_lock.try_recv().unwrap_or(0.0);
         *sample = data;
     }
 }

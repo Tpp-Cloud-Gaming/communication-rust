@@ -1,7 +1,6 @@
 pub mod audio;
 pub mod utils;
 pub mod webrtcommunication;
-
 use std::io::{Error, ErrorKind};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -12,13 +11,11 @@ use crate::audio::audio_capture::AudioCapture;
 use crate::audio::audio_encoder::AudioEncoder;
 
 use crate::utils::common_utils::get_args;
-use crate::webrtcommunication::communication::Communication;
-
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
+use crate::webrtcommunication::communication::{encode, Communication};
 
 use tokio::sync::Notify;
 
+use tokio::task::JoinHandle;
 use webrtc::api::media_engine::MIME_TYPE_OPUS;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::media::Sample;
@@ -49,9 +46,7 @@ async fn main() -> Result<(), Error> {
     let notify_tx = Arc::new(Notify::new());
     let notify_audio = notify_tx.clone();
 
-    //NO BORRAR
     let _stream = audio_capture.start()?;
-    //stream.play().unwrap();
 
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
 
@@ -84,13 +79,26 @@ async fn main() -> Result<(), Error> {
         anyhow::Result::<()>::Ok(())
     });
 
-    tokio::spawn(async move {
+    let _h: JoinHandle<Result<(), Error>> = tokio::spawn(async move {
         // Wait for connection established
         notify_audio.notified().await;
-        let mut encoder = AudioEncoder::new().unwrap();
+        let mut encoder = match AudioEncoder::new() {
+            Ok(e) => e,
+            Err(err) => {
+                log::error!("SENDER | Error creating audio encoder | {}", err);
+                return Err(Error::new(ErrorKind::Other, "Error creating audio encoder"));
+            }
+        };
 
         loop {
-            let data = rx.recv().unwrap();
+            //TODO: agregar tolerancia como en receiver
+            let data = match rx.recv() {
+                Ok(d) => d,
+                Err(err) => {
+                    log::error!("SENDER | Error receiving audio data | {}", err);
+                    continue;
+                }
+            };
             let encoded_data = match encoder.encode(data) {
                 Ok(d) => d,
                 Err(err) => {
@@ -137,7 +145,7 @@ async fn main() -> Result<(), Error> {
 
     if let Some(local_desc) = pc.local_description().await {
         let json_str = serde_json::to_string(&local_desc)?;
-        let b64 = BASE64_STANDARD.encode(json_str);
+        let b64 = encode(&json_str);
         println!("{b64}");
     } else {
         log::error!("SENDER | Generate local_description failed");

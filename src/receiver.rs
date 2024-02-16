@@ -1,9 +1,6 @@
 pub mod audio;
 pub mod utils;
 pub mod webrtcommunication;
-
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
@@ -27,7 +24,7 @@ use crate::audio::audio_decoder::AudioDecoder;
 use crate::utils::common_utils::get_args;
 use crate::utils::latency_const::LATENCY_CHANNEL_LABEL;
 use crate::utils::webrtc_const::{ENCODE_BUFFER_SIZE, STUN_ADRESS};
-use crate::webrtcommunication::communication::Communication;
+use crate::webrtcommunication::communication::{encode, Communication};
 use crate::webrtcommunication::latency::Latency;
 
 #[tokio::main]
@@ -40,11 +37,27 @@ async fn main() -> Result<(), Error> {
 
     let (tx_decoder_1, rx_decoder_1): (Sender<f32>, Receiver<f32>) =
         tokio::sync::mpsc::channel(ENCODE_BUFFER_SIZE);
-    let audio_player =
-        audio::audio_player::AudioPlayer::new(audio_device, Arc::new(Mutex::new(rx_decoder_1)))
-            .unwrap();
-    let stream = audio_player.start().unwrap();
-    stream.play().unwrap();
+    let audio_player = match audio::audio_player::AudioPlayer::new(
+        audio_device,
+        Arc::new(Mutex::new(rx_decoder_1)),
+    ) {
+        Ok(audio_player) => audio_player,
+        Err(e) => {
+            log::error!("RECEIVER | Error creating audio player: {e}");
+            return Err(Error::new(ErrorKind::Other, "Error creating audio player"));
+        }
+    };
+    let stream = match audio_player.start() {
+        Ok(stream) => stream,
+        Err(e) => {
+            log::error!("RECEIVER | Error starting audio player: {e}");
+            return Err(Error::new(ErrorKind::Other, "Error starting audio player"));
+        }
+    };
+    if let Err(e) = stream.play() {
+        log::error!("RECEIVER | Error playing audio player: {e}");
+        return Err(Error::new(ErrorKind::Other, "Error playing audio player"));
+    };
 
     let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
@@ -109,7 +122,7 @@ async fn main() -> Result<(), Error> {
     if let Some(local_desc) = peer_connection.local_description().await {
         // IMPRIMIR SDP EN BASE64
         let json_str = serde_json::to_string(&local_desc)?;
-        let b64 = BASE64_STANDARD.encode(json_str);
+        let b64 = encode(&json_str);
         println!("{b64}");
     } else {
         log::error!("RECEIVER | Generate local_description failed!");
@@ -169,7 +182,13 @@ fn set_on_track_handler(
         });
 
         let notify_rx2 = Arc::clone(&notify_rx);
-        let decoder = AudioDecoder::new().unwrap();
+        let decoder = match AudioDecoder::new() {
+            Ok(decoder) => decoder,
+            Err(e) => {
+                log::error!("RECEIVER | Error creating audio decoder: {e}"); //TODO: retornar error
+                return Box::pin(async {});
+            }
+        };
 
         let tx_decoder_1_clone = tx_decoder_1.clone();
         Box::pin(async move {
@@ -212,26 +231,41 @@ async fn read_track(
     notify: Arc<Notify>,
     mut decoder: AudioDecoder,
     tx: &Sender<f32>,
-) -> Result<(), ()> {
+) -> Result<(), Error> {
+    let mut error_counter = 0;
+    let mut packet_counter = 0;
+    //TODO: probar y usar contantes para este caso de tolerancia de fallos
     loop {
         tokio::select! {
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
-                    //println!("Llega Luquitas");
-                    let value = decoder.decode(rtp_packet.payload.to_vec()).unwrap();
+                    let value = match decoder.decode(rtp_packet.payload.to_vec()){
+                        Ok(value) => value,
+                        Err(e) => {
+                            log::error!("RECEIVER | Error decoding RTP packet: {e}");
+                            error_counter += 1;
+                            continue
+                        }
+                    };
                     for v in value {
                         let _ = tx.try_send(v);
                     }
 
                 }else{
-                    println!("Error leyendo paquete");
-                    return Ok(());
+                    log::info!("RECEIVER | Error reading RTP packet");
+                    error_counter += 1;
                 }
+                packet_counter += 1;
             }
             _ = notify.notified() => {
-                println!("file closing begin after notified");
-                return Ok(());
+                log::info!("RECEIVER | file closing begin after notified");
             }
+        }
+        if packet_counter == 100 && error_counter > 50 {
+            return Err(Error::new(ErrorKind::Other, "Too many errors"));
+        } else if error_counter == 100 {
+            error_counter = 0;
+            packet_counter = 0;
         }
     }
 }
@@ -244,11 +278,14 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>) {
         if d_label == LATENCY_CHANNEL_LABEL {
             Box::pin(async move {
                 // Start the latency measurement
-                Latency::start_latency_receiver(d).await.unwrap(); //TODO: sacar unwrap
+                if let Err(e) = Latency::start_latency_receiver(d).await {
+                    log::error!("RECEIVER | Error starting latency receiver: {e}");
+                    //TODO: retornar error?
+                }
             })
         } else {
             Box::pin(async move {
-                println!("RECEIVER | New DataChannel has been opened | {d_label}");
+                log::info!("RECEIVER |New DataChannel has been opened | {d_label}");
             })
         }
     }));

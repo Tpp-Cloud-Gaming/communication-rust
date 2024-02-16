@@ -148,7 +148,7 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
     };
 
     if last_two_digits == 0 {
-        log::error!("LATENCY | Last two digits are 0");
+        log::info!("LATENCY | Last two digits are 0");
         return Ok(0);
     }
 
@@ -157,7 +157,7 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
         _secs_in_milis = t;
     } else {
         //Overflow detected
-        log::error!("LATENCY | Overflow when multiplying last two digits by 1000");
+        log::info!("LATENCY | Overflow when multiplying last two digits by 1000");
         return Ok(0);
     }
 
@@ -165,7 +165,7 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
     if let Some(t) = result.roundtrip().checked_div(1000) {
         _rtt_in_milis = t;
     } else {
-        log::error!("LATENCY | Overflow when dividing roundtrip by 1000");
+        log::info!("LATENCY | Overflow when dividing roundtrip by 1000");
         return Ok(0);
     };
 
@@ -181,8 +181,14 @@ fn get_time_from_sntp(socket: UdpSocket) -> Result<NtpResult, Error> {
 
     // If http request fails, retry max_retry times
     while retry < MAX_SNTP_RETRY {
-        //TODO:unwrap
-        if let Ok(r) = sntpc::simple_get_time(SNTP_POOL_ADDR, socket.try_clone().unwrap()) {
+        let socket_clone = match socket.try_clone() {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("LATENCY | Error cloning socket: {:?}", e);
+                return Err(Error::new(ErrorKind::Other, "Error cloning socket"));
+            }
+        };
+        if let Ok(r) = sntpc::simple_get_time(SNTP_POOL_ADDR, socket_clone) {
             result = r;
             break;
         } else {

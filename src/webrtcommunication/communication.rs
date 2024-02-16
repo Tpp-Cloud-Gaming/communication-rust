@@ -132,6 +132,6 @@ fn decode(s: &str) -> Result<String, Error> {
     }
 }
 
-fn encode(b: &str) -> String {
+pub fn encode(b: &str) -> String {
     BASE64_STANDARD.encode(b)
 }

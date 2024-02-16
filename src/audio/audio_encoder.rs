@@ -15,7 +15,7 @@ impl AudioEncoder {
     pub fn new() -> Result<Self, Error> {
         let encoder =
             opus::Encoder::new(SAMPLE_RATE, opus::Channels::Stereo, opus::Application::Voip)
-                .unwrap();
+                .map_err(|e| Error::new(std::io::ErrorKind::Other, e))?;
 
         Ok(Self { encoder })
     }

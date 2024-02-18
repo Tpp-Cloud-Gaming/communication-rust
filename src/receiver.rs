@@ -5,8 +5,10 @@ use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::Notify;
+use tokio::sync::{Notify, Semaphore};
 
+use utils::error_tracker::ErrorTracker;
+use utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{
@@ -16,7 +18,7 @@ use webrtc::{
 };
 
 use std::sync::Mutex;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{error, Receiver, Sender};
 
 use cpal::traits::StreamTrait;
 
@@ -26,11 +28,13 @@ use crate::utils::latency_const::LATENCY_CHANNEL_LABEL;
 use crate::utils::webrtc_const::{ENCODE_BUFFER_SIZE, STUN_ADRESS};
 use crate::webrtcommunication::communication::{encode, Communication};
 use crate::webrtcommunication::latency::Latency;
+use tokio::signal;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     // Initialize Log:
     env_logger::builder().format_target(false).init();
+    let error_notifier = Arc::new(tokio::sync::Semaphore::new(0));
 
     //Check for CLI args
     let audio_device = get_args();
@@ -69,7 +73,12 @@ async fn main() -> Result<(), Error> {
     // Set a handler for when a new remote track starts, this handler saves buffers to disk as
     // an ivf file, since we could have multiple video tracks we provide a counter.
     // In your application this is where you would handle/process video
-    set_on_track_handler(&peer_connection, notify_rx, tx_decoder_1);
+    set_on_track_handler(
+        &peer_connection,
+        notify_rx,
+        tx_decoder_1,
+        error_notifier.clone(),
+    );
 
     channel_handler(&peer_connection);
 
@@ -85,11 +94,9 @@ async fn main() -> Result<(), Error> {
         ));
     }
 
-    let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
-
     // Set the handler for ICE connection state
     // This will notify you when the peer has connected/disconnected
-    set_on_ice_connection_state_change_handler(&peer_connection, notify_tx, done_tx);
+    set_on_ice_connection_state_change_handler(&peer_connection, notify_tx, error_notifier.clone());
 
     // Set the remote SessionDescription: ACA METER USER INPUT Y PEGAR EL SDP
     // Wait for the offer to be pasted
@@ -130,12 +137,13 @@ async fn main() -> Result<(), Error> {
 
     println!("Press ctrl-c to stop");
     tokio::select! {
-        _ = done_rx.recv() => {
-            log::info!("RECEIVER | Received done signal");
-        }
         _ = tokio::signal::ctrl_c() => {
-            log::info!("RECEIVER | Received done signal222");
+            log::info!("RECEIVER | ctrl-c signal");
             println!();
+        }
+        _ = error_notifier.acquire() => {
+            //TODO: debería ser el ultimo que cierra, chequear que todo termino y recien ahi salir
+            log::info!("RECEIVER | Error notifier signal");
         }
     };
 
@@ -146,6 +154,8 @@ async fn main() -> Result<(), Error> {
         ));
     }
 
+    error_notifier.close();
+
     Ok(())
 }
 
@@ -153,6 +163,7 @@ fn set_on_track_handler(
     peer_connection: &Arc<RTCPeerConnection>,
     notify_rx: Arc<Notify>,
     tx_decoder_1: Sender<f32>,
+    error_notifier: Arc<Semaphore>,
 ) {
     let pc = Arc::downgrade(peer_connection);
 
@@ -174,7 +185,7 @@ fn set_on_track_handler(
                                 media_ssrc,
                             })]).await.map_err(Into::into);
                         }else{
-                            break;
+                            break;//TODO: error
                         }
                     }
                 };
@@ -185,20 +196,28 @@ fn set_on_track_handler(
         let decoder = match AudioDecoder::new() {
             Ok(decoder) => decoder,
             Err(e) => {
-                log::error!("RECEIVER | Error creating audio decoder: {e}"); //TODO: retornar error
+                log::error!("RECEIVER | Error creating audio decoder: {e}");
                 return Box::pin(async {});
             }
         };
 
         let tx_decoder_1_clone = tx_decoder_1.clone();
+        let error_notifier_cpy = error_notifier.clone();
         Box::pin(async move {
             let codec = track.codec();
             let mime_type = codec.capability.mime_type.to_lowercase();
             if mime_type == MIME_TYPE_OPUS.to_lowercase() {
                 log::info!("RECEIVER | Got OPUS Track");
-
                 tokio::spawn(async move {
-                    let _ = read_track(track, notify_rx2, decoder, &tx_decoder_1_clone).await;
+                    let _ = read_track(
+                        track,
+                        notify_rx2,
+                        decoder,
+                        &tx_decoder_1_clone,
+                        error_notifier_cpy,
+                    )
+                    .await;
+                    //TODO: agregar signaling
                 });
             }
         })
@@ -208,7 +227,7 @@ fn set_on_track_handler(
 fn set_on_ice_connection_state_change_handler(
     peer_connection: &Arc<RTCPeerConnection>,
     notify_tx: Arc<Notify>,
-    done_tx: Sender<()>,
+    error_notifier: Arc<Semaphore>,
 ) {
     peer_connection.on_ice_connection_state_change(Box::new(
         move |connection_state: RTCIceConnectionState| {
@@ -219,7 +238,7 @@ fn set_on_ice_connection_state_change_handler(
             } else if connection_state == RTCIceConnectionState::Failed {
                 notify_tx.notify_waiters();
 
-                let _ = done_tx.try_send(());
+                error_notifier.add_permits(1);
             }
             Box::pin(async {})
         },
@@ -231,41 +250,53 @@ async fn read_track(
     notify: Arc<Notify>,
     mut decoder: AudioDecoder,
     tx: &Sender<f32>,
+    error_notifier: Arc<Semaphore>,
 ) -> Result<(), Error> {
-    let mut error_counter = 0;
-    let mut packet_counter = 0;
-    //TODO: probar y usar contantes para este caso de tolerancia de fallos
+    let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
     loop {
+        //TODO: signaling de error
         tokio::select! {
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
                     let value = match decoder.decode(rtp_packet.payload.to_vec()){
-                        Ok(value) => value,
+                        Ok(value) => {
+                            error_tracker.increment();
+                            value
+                        },
                         Err(e) => {
-                            log::error!("RECEIVER | Error decoding RTP packet: {e}");
-                            error_counter += 1;
+
+                            if error_tracker.increment_with_error(){
+                                log::error!("RECEIVER | Max Attemps | Error decoding RTP packet: {e}");
+                                error_notifier.add_permits(1);
+                                return Err(Error::new(ErrorKind::Other, "Error decoding RTP packet"));
+                            }else{
+                                log::warn!("RECEIVER | Error decoding RTP packet: {e}");
+                            }
                             continue
                         }
                     };
                     for v in value {
                         let _ = tx.try_send(v);
                     }
-
+                    error_tracker.increment();
+                }else if error_tracker.increment_with_error(){
+                        log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
+                        error_notifier.add_permits(1);
+                        return Err(Error::new(ErrorKind::Other, "Error reading RTP packet"));
                 }else{
-                    log::info!("RECEIVER | Error reading RTP packet");
-                    error_counter += 1;
-                }
-                packet_counter += 1;
+                        log::warn!("RECEIVER | Error reading RTP packet");
+                };
+
+            }
+            _ = tokio::signal::ctrl_c() => {
+                return Ok(());
+            }
+            _= error_notifier.acquire() => {
+                return Ok(());
             }
             _ = notify.notified() => {
                 log::info!("RECEIVER | file closing begin after notified");
             }
-        }
-        if packet_counter == 100 && error_counter > 50 {
-            return Err(Error::new(ErrorKind::Other, "Too many errors"));
-        } else if error_counter == 100 {
-            error_counter = 0;
-            packet_counter = 0;
         }
     }
 }

@@ -25,7 +25,10 @@ use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 use webrtc::track::track_local::TrackLocal;
 
-use crate::utils::webrtc_const::{CHANNELS, SAMPLE_RATE, STREAM_TRACK_ID, STUN_ADRESS, TRACK_ID};
+use crate::utils::webrtc_const::{
+    CHANNELS, SAMPLE_RATE, SEND_TRACK_LIMIT, SEND_TRACK_THRESHOLD, STREAM_TRACK_ID, STUN_ADRESS,
+    TRACK_ID,
+};
 use crate::webrtcommunication::latency::Latency;
 
 #[tokio::main]
@@ -90,19 +93,41 @@ async fn main() -> Result<(), Error> {
             }
         };
 
+        let mut error_tracker =
+            utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
+
         loop {
-            //TODO: agregar tolerancia como en receiver
+            //TODO: signaling
             let data = match rx.recv() {
-                Ok(d) => d,
+                Ok(d) => {
+                    error_tracker.increment();
+                    d
+                }
                 Err(err) => {
-                    log::error!("SENDER | Error receiving audio data | {}", err);
+                    if error_tracker.increment_with_error() {
+                        log::error!(
+                            "SENDER | Max attemps | Error receiving audio data | {}",
+                            err
+                        );
+                        return Err(Error::new(ErrorKind::Other, "Error receiving audio data"));
+                    } else {
+                        log::warn!("SENDER | Error receiving audio data | {}", err);
+                    };
                     continue;
                 }
             };
             let encoded_data = match encoder.encode(data) {
-                Ok(d) => d,
+                Ok(d) => {
+                    error_tracker.increment();
+                    d
+                }
                 Err(err) => {
-                    log::error!("SENDER | Error encoding audio | {}", err);
+                    if error_tracker.increment_with_error() {
+                        log::error!("SENDER | Max attemps | Error encoding audio | {}", err);
+                        return Err(Error::new(ErrorKind::Other, "Error encoding audio data"));
+                    } else {
+                        log::warn!("SENDER | Error encoding audio | {}", err);
+                    };
                     continue;
                 }
             };
@@ -117,7 +142,16 @@ async fn main() -> Result<(), Error> {
                 })
                 .await
             {
-                log::error!("SENDER | Error writing sample | {}", err);
+                log::warn!("SENDER | Error writing sample | {}", err);
+                if error_tracker.increment_with_error() {
+                    log::error!("SENDER | Max attemps | Error writing sample | {}", err);
+                    return Err(Error::new(ErrorKind::Other, "Error writing sample"));
+                } else {
+                    log::warn!("SENDER | Error writing sample | {}", err);
+                };
+                continue;
+            } else {
+                error_tracker.increment();
             }
         }
     });

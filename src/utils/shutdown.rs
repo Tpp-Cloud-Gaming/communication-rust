@@ -46,19 +46,24 @@ impl Shutdown {
 
     // Task who triggered the shutdown will call this method
     pub async fn notify_error(&self, main_task: bool) {
-        let mut counter = self.counter.lock().await;
+        {
+            let mut counter = self.counter.lock().await;
 
-        if !main_task {
-            *counter -= 1;
+            if !main_task {
+                *counter -= 1;
+            }
+            if *counter == 0 {
+                self.shutdown_notifier.add_permits(1);
+            }
+
+            let mut notifier_active = self.notifier_active.lock().await;
+            if !(*notifier_active) {
+                self.error_notifier.add_permits(*counter as usize);
+                *notifier_active = true;
+            }
+        }
+        if main_task {
             _ = self.wait_for_shutdown().await;
-        }
-        if *counter == 0 {
-            self.shutdown_notifier.add_permits(1);
-        }
-        let mut notifier_active = self.notifier_active.lock().await;
-        if !(*notifier_active) {
-            self.error_notifier.add_permits(*counter as usize);
-            *notifier_active = true;
         }
     }
 

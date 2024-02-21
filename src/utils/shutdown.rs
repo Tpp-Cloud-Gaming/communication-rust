@@ -6,6 +6,13 @@ pub struct Shutdown {
     error_notifier: Arc<Semaphore>,
     shutdown_notifier: Arc<Semaphore>,
     counter: Arc<Mutex<u32>>,
+    notifier_active: Arc<Mutex<bool>>,
+}
+
+impl Default for Shutdown {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Shutdown {
@@ -14,6 +21,7 @@ impl Shutdown {
             error_notifier: Arc::new(Semaphore::new(0)),
             shutdown_notifier: Arc::new(Semaphore::new(0)),
             counter: Arc::new(Mutex::new(0)),
+            notifier_active: Arc::new(Mutex::new(false)),
         }
     }
 
@@ -28,7 +36,7 @@ impl Shutdown {
         if *counter == 0 {
             self.shutdown_notifier.add_permits(1);
         }
-        return r;
+        r
     }
 
     pub async fn add_task(&self) {
@@ -42,11 +50,16 @@ impl Shutdown {
 
         if !main_task {
             *counter -= 1;
+            _ = self.wait_for_shutdown().await;
         }
         if *counter == 0 {
             self.shutdown_notifier.add_permits(1);
         }
-        self.error_notifier.add_permits(*counter as usize);
+        let mut notifier_active = self.notifier_active.lock().await;
+        if !(*notifier_active) {
+            self.error_notifier.add_permits(*counter as usize);
+            *notifier_active = true;
+        }
     }
 
     pub async fn check_for_error(&self) -> bool {
@@ -57,16 +70,14 @@ impl Shutdown {
                 if *counter == 0 {
                     self.shutdown_notifier.add_permits(1);
                 }
-                return true;
+                true
             }
             Err(TryAcquireError::Closed) => {
                 self.notify_error(false).await;
-                return true;
+                true
             }
-            Err(TryAcquireError::NoPermits) => {
-                return false;
-            }
-        };
+            Err(TryAcquireError::NoPermits) => false,
+        }
     }
 
     pub fn shutdown(&self) {

@@ -3,7 +3,6 @@ pub mod utils;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
-use std::time::Duration;
 
 use utils::error_tracker::ErrorTracker;
 use utils::shutdown;
@@ -11,9 +10,8 @@ use utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{
-    api::media_engine::MIME_TYPE_OPUS,
-    rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication,
-    rtp_transceiver::rtp_codec::RTPCodecType, track::track_remote::TrackRemote,
+    api::media_engine::MIME_TYPE_OPUS, rtp_transceiver::rtp_codec::RTPCodecType,
+    track::track_remote::TrackRemote,
 };
 
 use std::sync::Mutex;
@@ -152,36 +150,7 @@ fn set_on_track_handler(
     tx_decoder_1: Sender<f32>,
     shutdown: shutdown::Shutdown,
 ) {
-    let pc = Arc::downgrade(peer_connection);
-
     peer_connection.on_track(Box::new(move |track, _, _| {
-        // Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
-        let media_ssrc = track.ssrc();
-        let pc2 = pc.clone();
-
-        //TODO: Revisar si esta task es necesaria!
-        // en caso de que si evaluar si tiene que enviar un notify_error
-        tokio::spawn(async move {
-            let mut result = anyhow::Result::<usize>::Ok(0);
-            while result.is_ok() {
-                let timeout = tokio::time::sleep(Duration::from_secs(3));
-                tokio::pin!(timeout);
-
-                tokio::select! {
-                    _ = timeout.as_mut() =>{
-                        if let Some(pc) = pc2.upgrade(){
-                            result = pc.write_rtcp(&[Box::new(PictureLossIndication{
-                                sender_ssrc: 0,
-                                media_ssrc,
-                            })]).await.map_err(Into::into);
-                        }else{
-                            break;
-                        }
-                    }
-                };
-            }
-        });
-
         let codec = track.codec();
         let mime_type = codec.capability.mime_type.to_lowercase();
 

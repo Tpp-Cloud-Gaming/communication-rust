@@ -11,7 +11,7 @@ use utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{
-    api::media_engine::MIME_TYPE_OPUS, ice_transport::ice_connection_state::RTCIceConnectionState,
+    api::media_engine::MIME_TYPE_OPUS,
     rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication,
     rtp_transceiver::rtp_codec::RTPCodecType, track::track_remote::TrackRemote,
 };
@@ -85,9 +85,7 @@ async fn main() -> Result<(), Error> {
         ));
     }
 
-    // Set the handler for ICE connection state
-    // This will notify you when the peer has connected/disconnected
-    set_on_ice_connection_state_change_handler(&peer_connection, shutdown.clone());
+    //set_on_ice_connection_state_change_handler(&peer_connection, shutdown.clone());
 
     // Set the remote SessionDescription: ACA METER USER INPUT Y PEGAR EL SDP
     // Wait for the offer to be pasted
@@ -199,31 +197,36 @@ fn set_on_track_handler(
             });
         };
 
-        return Box::pin(async {});
+        Box::pin(async {})
     }));
 }
 
-fn set_on_ice_connection_state_change_handler(
-    peer_connection: &Arc<RTCPeerConnection>,
-    _shutdown: shutdown::Shutdown,
-) {
-    peer_connection.on_ice_connection_state_change(Box::new(
-        move |connection_state: RTCIceConnectionState| {
-            log::info!("RECEIVER | ICE Connection State has changed | {connection_state}");
+//Esta funcion solo sirve para que detecte si algun on ice pasa a connection state failed y ahi
+// mande un signal para que todo termine
 
-            if connection_state == RTCIceConnectionState::Connected {
-                //let shutdown_cpy = shutdown.clone();
-            } else if connection_state == RTCIceConnectionState::Failed {
-                //TODO: ver que hacer en este escenario
-                //let shutdown_cpy = shutdown.clone();
-                // _ = Box::pin(async move {
-                //     shutdown_cpy.notify_error(true).await;
-                // });
-            }
-            Box::pin(async {})
-        },
-    ));
-}
+// Set the handler for ICE connection state
+// This will notify you when the peer has connected/disconnected
+// fn set_on_ice_connection_state_change_handler(
+//     peer_connection: &Arc<RTCPeerConnection>,
+//     _shutdown: shutdown::Shutdown,
+// ) {
+//     peer_connection.on_ice_connection_state_change(Box::new(
+//         move |connection_state: RTCIceConnectionState| {
+//             log::info!("RECEIVER | ICE Connection State has changed | {connection_state}");
+
+//             // if connection_state == RTCIceConnectionState::Connected {
+//             //     //let shutdown_cpy = shutdown.clone();
+//             // } else if connection_state == RTCIceConnectionState::Failed {
+//             //     TODO: ver que hacer en este escenario
+//             //     let shutdown_cpy = shutdown.clone();
+//             //     _ = Box::pin(async move {
+//             //         shutdown_cpy.notify_error(true).await;
+//             //     });
+//             // }
+//             Box::pin(async {})
+//         },
+//     ));
+// }
 
 async fn read_track(
     track: Arc<TrackRemote>,
@@ -299,7 +302,6 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
                 if let Err(e) = Latency::start_latency_receiver(d).await {
                     log::error!("RECEIVER | Error starting latency receiver: {e}");
                     shutdown_cpy.notify_error(false).await;
-                    return;
                 }
             })
         } else {

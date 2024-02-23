@@ -1,0 +1,159 @@
+use std::io;
+
+use gstreamer::prelude::*;
+
+use winapi::{ shared::{minwindef::{BOOL, LPARAM, TRUE}, windef::HWND}, um::winuser::{EnumWindows, GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible}};
+
+
+unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+
+    let hwnds: &mut Vec<(HWND, String, String)> = &mut *(lparam as *mut Vec<(HWND, String, String)>);
+
+    let mut class_name = [0u16; 256];
+    let mut window_text = [0u16; 256];
+
+    // Get class name of the window
+    GetClassNameW(hwnd, class_name.as_mut_ptr(), 256);
+
+    // Get window text
+    GetWindowTextW(hwnd, window_text.as_mut_ptr(), 256);
+
+    // Convert window text and class name to Rust strings
+    let binding = String::from_utf16(&window_text).unwrap();
+    let window_text_as_str = binding.trim_matches(char::from(0));
+    let binding = String::from_utf16(&class_name).unwrap();
+    let class_name_as_str = binding.trim_matches(char::from(0));
+
+    
+    //let a = &lparam as *mut Vec<isize>;
+    if IsWindowVisible(hwnd) == TRUE && IsWindowEnabled(hwnd) == TRUE && window_text_as_str.len() > 0{
+        hwnds.push((hwnd, class_name_as_str.to_string(), window_text_as_str.to_string()));
+    }
+    
+    TRUE
+}
+
+
+fn run() {
+    // Initialize GStreamer
+    gstreamer::init().unwrap();
+
+    //let mut windows: Vec<isize> = vec![];
+
+    let mut hwnds: Vec<(HWND, String, String)> = Vec::new();
+    unsafe { EnumWindows(Some(enumerate_callback), &mut hwnds as *mut _ as LPARAM)};
+
+    let mut count = 0;
+    for element in &hwnds {
+        
+        println!("[{}] HWND: {:?}, Class Name:  {}, Window Text: {}", count, element.0, element.1, element.2);
+        count += 1;
+    }
+    
+
+    println!("Please enter a number:");
+
+    let mut input = String::new();
+
+    // Read input from the user
+    io::stdin().read_line(&mut input)
+        .expect("Failed to read line");
+
+    // Parse the input string into an integer
+    let number: usize = match input.trim().parse() {
+        Ok(num) => num,
+        Err(_) => {
+            println!("Invalid input, please enter a valid number.");
+            return; // Exit the program or handle the error as appropriate
+        }
+    };
+
+    let selected = hwnds.get(number).unwrap();
+    let window_handle = selected.0 as u64;
+    println!("You selected: {}", selected.2);
+    
+    // Create the elements
+    let d3d11screencapturesrc = gstreamer::ElementFactory::make("d3d11screencapturesrc")
+        .name("d3d11screencapturesrc")
+        .property("show-cursor", true)
+        .property("window-handle", window_handle)
+        .build()
+        .expect("Could not create d3d11screencapturesrc element.");
+
+    let d3d11convert = gstreamer::ElementFactory::make("d3d11convert")
+        .name("d3d11convert")
+        .build()
+        .expect("Could not create d3d11convert element.");
+
+    let mfh264enc = gstreamer::ElementFactory::make("mfh264enc")
+        .name("mfh264enc")
+        .build()
+        .expect("Could not create mfh264enc element.");
+
+    let h264parse = gstreamer::ElementFactory::make("h264parse")
+        .name("h264parse")
+        .build()
+        .expect("Could not create h264parse element.");
+
+    let d3d11h264dec = gstreamer::ElementFactory::make("d3d11h264dec")
+        .name("d3d11h264dec")
+        .build()
+        .expect("Could not create d3d11h264dec element.");
+
+    let d3d11videosink = gstreamer::ElementFactory::make("d3d11videosink")
+        .name("d3d11videosink")
+        .build()
+        .expect("Could not create d3d11videosink element.");
+
+    // Create the empty pipeline
+    let pipeline = gstreamer::Pipeline::with_name("pipeline");
+
+    // Build the pipeline Note that we are NOT linking the source at this
+    // point. We will do it later.
+    pipeline.add_many([&d3d11screencapturesrc, &d3d11convert, &mfh264enc, &h264parse, &d3d11h264dec, &d3d11videosink]).unwrap();
+
+    gstreamer::Element::link_many([&d3d11screencapturesrc, &d3d11convert, &mfh264enc, &h264parse, &d3d11h264dec, &d3d11videosink])
+        .expect("Elements could not be linked.");
+
+    // Start playing
+    pipeline
+        .set_state(gstreamer::State::Playing)
+        .expect("Unable to set the pipeline to the `Playing` state");
+
+    // Wait until error or EOS
+    let bus = pipeline.bus().unwrap();
+    for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
+        use gstreamer::MessageView;
+
+        match msg.view() {
+            MessageView::Error(err) => {
+                eprintln!(
+                    "Error received from element {:?} {}",
+                    err.src().map(|s| s.path_string()),
+                    err.error()
+                );
+                eprintln!("Debugging information: {:?}", err.debug());
+                break;
+            }
+            MessageView::StateChanged(state_changed) => {
+                if state_changed.src().map(|s| s == &pipeline).unwrap_or(false) {
+                    println!(
+                        "Pipeline state changed from {:?} to {:?}",
+                        state_changed.old(),
+                        state_changed.current()
+                    );
+                }
+            }
+            MessageView::Eos(..) => break,
+            _ => (),
+        }
+    }
+
+    pipeline
+        .set_state(gstreamer::State::Null)
+        .expect("Unable to set the pipeline to the `Null` state");
+}
+
+fn main() {
+    run()
+}

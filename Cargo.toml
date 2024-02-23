@@ -20,6 +20,8 @@ openh264 = "0.5.0"
 chrono = "0.4.33"
 sntpc = "0.3.7"
 env_logger = "0.10.0"
+gstreamer = "0.22.1"
+winapi = { version = "0.3.9", features = ["winuser"] }
 
  [[bin]]
  name = "sender"
@@ -28,3 +30,7 @@ env_logger = "0.10.0"
  [[bin]]
  name = "receiver"
  path = "src/receiver.rs"
+
+ [[bin]]
+ name = "video"
+ path = "src/video_capture.rs"

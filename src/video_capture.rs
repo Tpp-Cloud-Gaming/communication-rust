@@ -1,6 +1,6 @@
-use std::io;
+use std::{io, thread};
 
-use gstreamer::prelude::*;
+use gstreamer::{element_error, event::CapsBuilder, prelude::*};
 
 use winapi::{ shared::{minwindef::{BOOL, LPARAM, TRUE}, windef::HWND}, um::winuser::{EnumWindows, GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible}};
 
@@ -37,8 +37,6 @@ unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL
 fn run() {
     // Initialize GStreamer
     gstreamer::init().unwrap();
-
-    //let mut windows: Vec<isize> = vec![];
 
     let mut hwnds: Vec<(HWND, String, String)> = Vec::new();
     unsafe { EnumWindows(Some(enumerate_callback), &mut hwnds as *mut _ as LPARAM)};
@@ -90,12 +88,22 @@ fn run() {
         .build()
         .expect("Could not create mfh264enc element.");
 
-    let h264parse = gstreamer::ElementFactory::make("h264parse")
+    /*let h264parse = gstreamer::ElementFactory::make("h264parse")
         .name("h264parse")
         .build()
-        .expect("Could not create h264parse element.");
+        .expect("Could not create h264parse element.");*/
 
-    let d3d11h264dec = gstreamer::ElementFactory::make("d3d11h264dec")
+    let sink = gstreamer_app::AppSink::builder()
+        // Tell the appsink what format we want.
+        // This can be set after linking the two objects, because format negotiation between
+        // both elements will happen during pre-rolling of the pipeline.
+        .caps(
+            &gstreamer_video::VideoCapsBuilder::for_encoding("video/x-h264").build(),
+        )
+        .build();
+
+        
+    /*let d3d11h264dec = gstreamer::ElementFactory::make("d3d11h264dec")
         .name("d3d11h264dec")
         .build()
         .expect("Could not create d3d11h264dec element.");
@@ -103,29 +111,83 @@ fn run() {
     let d3d11videosink = gstreamer::ElementFactory::make("d3d11videosink")
         .name("d3d11videosink")
         .build()
-        .expect("Could not create d3d11videosink element.");
+        .expect("Could not create d3d11videosink element.");*/
+
 
     // Create the empty pipeline
     let pipeline = gstreamer::Pipeline::with_name("pipeline");
 
     // Build the pipeline Note that we are NOT linking the source at this
     // point. We will do it later.
-    pipeline.add_many([&d3d11screencapturesrc, &d3d11convert, &mfh264enc, &h264parse, &d3d11h264dec, &d3d11videosink]).unwrap();
+    pipeline.add_many([&d3d11screencapturesrc, &d3d11convert, &mfh264enc, /*&h264parse,*/ &sink.upcast_ref()/*, &d3d11h264dec, &d3d11videosink */] ).unwrap();
 
-    gstreamer::Element::link_many([&d3d11screencapturesrc, &d3d11convert, &mfh264enc, &h264parse, &d3d11h264dec, &d3d11videosink])
+    gstreamer::Element::link_many([&d3d11screencapturesrc, &d3d11convert, &mfh264enc, /*&h264parse,*/ &sink.upcast_ref()/*, &d3d11h264dec, &d3d11videosink */])
         .expect("Elements could not be linked.");
 
+
+    sink.set_callbacks(
+        gstreamer_app::AppSinkCallbacks::builder()
+            // Add a handler to the "new-sample" signal.
+            .new_sample(|appsink| {
+                // Pull the sample in question out of the appsink's buffer.
+                let sample = appsink.pull_sample().unwrap();
+
+                let buffer = sample.buffer().ok_or_else(|| {
+                    element_error!(
+                        appsink,
+                        gstreamer::ResourceError::Failed,
+                        ("Failed to get buffer from appsink")
+                    );
+
+                    gstreamer::FlowError::Error
+                })?;
+
+                // At this point, buffer is only a reference to an existing memory region somewhere.
+                // When we want to access its content, we have to map it while requesting the required
+                // mode of access (read, read/write).
+                // This type of abstraction is necessary, because the buffer in question might not be
+                // on the machine's main memory itself, but rather in the GPU's memory.
+                // So mapping the buffer makes the underlying memory region accessible to us.
+                // See: https://gstreamer.freedesktop.org/documentation/plugin-development/advanced/allocation.html
+                let map = buffer.map_readable().map_err(|_| {
+                    element_error!(
+                        appsink,
+                        gstreamer::ResourceError::Failed,
+                        ("Failed to map buffer readable")
+                    );
+
+                    gstreamer::FlowError::Error
+                })?;
+
+                // We know what format the data in the memory region has, since we requested
+                // it by setting the appsink's caps. So what we do here is interpret the
+                // memory region we mapped as an array of signed 16 bit integers.
+                let samples = map.as_slice();
+
+                println!("{:?}", samples);
+
+                Ok(gstreamer::FlowSuccess::Ok)
+            })
+            .build(),
+    );
+
+    
     // Start playing
     pipeline
         .set_state(gstreamer::State::Playing)
         .expect("Unable to set the pipeline to the `Playing` state");
 
+
+    
     // Wait until error or EOS
     let bus = pipeline.bus().unwrap();
     for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
         use gstreamer::MessageView;
 
         match msg.view() {
+            MessageView::Element(element) => {
+                println!("{:?}", element);
+            }
             MessageView::Error(err) => {
                 eprintln!(
                     "Error received from element {:?} {}",

@@ -1,7 +1,5 @@
-use std::{io, thread};
-
-use gstreamer::{element_error, event::CapsBuilder, prelude::*};
-
+use std::io;
+use gstreamer::{element_error,prelude::*};
 use winapi::{ shared::{minwindef::{BOOL, LPARAM, TRUE}, windef::HWND}, um::winuser::{EnumWindows, GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible}};
 
 
@@ -26,7 +24,7 @@ unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL
 
     
     //let a = &lparam as *mut Vec<isize>;
-    if IsWindowVisible(hwnd) == TRUE && IsWindowEnabled(hwnd) == TRUE && window_text_as_str.len() > 0{
+    if IsWindowVisible(hwnd) == TRUE && IsWindowEnabled(hwnd) == TRUE && !window_text_as_str.is_empty(){
         hwnds.push((hwnd, class_name_as_str.to_string(), window_text_as_str.to_string()));
     }
     
@@ -41,11 +39,8 @@ fn run() {
     let mut hwnds: Vec<(HWND, String, String)> = Vec::new();
     unsafe { EnumWindows(Some(enumerate_callback), &mut hwnds as *mut _ as LPARAM)};
 
-    let mut count = 0;
-    for element in &hwnds {
-        
+    for (count, element) in hwnds.iter().enumerate() {        
         println!("[{}] HWND: {:?}, Class Name:  {}, Window Text: {}", count, element.0, element.1, element.2);
-        count += 1;
     }
     
 
@@ -85,14 +80,11 @@ fn run() {
 
     let mfh264enc = gstreamer::ElementFactory::make("mfh264enc")
         .name("mfh264enc")
+        .property("low-latency", true)
         .build()
         .expect("Could not create mfh264enc element.");
 
-    /*let h264parse = gstreamer::ElementFactory::make("h264parse")
-        .name("h264parse")
-        .build()
-        .expect("Could not create h264parse element.");*/
-
+    
     let sink = gstreamer_app::AppSink::builder()
         // Tell the appsink what format we want.
         // This can be set after linking the two objects, because format negotiation between

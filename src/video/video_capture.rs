@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, sync::mpsc::Sender};
 use gstreamer::{element_error,prelude::*};
 use winapi::{ shared::{minwindef::{BOOL, LPARAM, TRUE}, windef::HWND}, um::winuser::{EnumWindows, GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible}};
 
@@ -32,7 +32,7 @@ unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL
 }
 
 
-fn run() {
+pub fn run(tx_video: Sender<Vec<u8>>) {
     // Initialize GStreamer
     gstreamer::init().unwrap();
 
@@ -120,7 +120,7 @@ fn run() {
     sink.set_callbacks(
         gstreamer_app::AppSinkCallbacks::builder()
             // Add a handler to the "new-sample" signal.
-            .new_sample(|appsink| {
+            .new_sample(move |appsink| {
                 // Pull the sample in question out of the appsink's buffer.
                 let sample = appsink.pull_sample().unwrap();
 
@@ -155,7 +155,7 @@ fn run() {
                 // it by setting the appsink's caps. So what we do here is interpret the
                 // memory region we mapped as an array of signed 16 bit integers.
                 let samples = map.as_slice();
-
+                tx_video.send(samples.to_vec()).expect("Error enviando sample");
                 println!("{:?}", samples);
 
                 Ok(gstreamer::FlowSuccess::Ok)
@@ -208,6 +208,6 @@ fn run() {
         .expect("Unable to set the pipeline to the `Null` state");
 }
 
-fn main() {
-    run()
-}
+// fn main() {
+//     run()
+// }

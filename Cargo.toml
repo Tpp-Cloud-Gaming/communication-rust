@@ -33,6 +33,4 @@ gstreamer-video = "0.22.1"
  name = "receiver"
  path = "src/receiver.rs"
 
- [[bin]]
- name = "video"
- path = "src/video_capture.rs"
+ 

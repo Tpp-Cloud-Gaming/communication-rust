@@ -39,32 +39,34 @@ pub fn run(tx_video: Sender<Vec<u8>>) {
     let mut hwnds: Vec<(HWND, String, String)> = Vec::new();
     unsafe { EnumWindows(Some(enumerate_callback), &mut hwnds as *mut _ as LPARAM)};
 
-    for (count, element) in hwnds.iter().enumerate() {        
-        println!("[{}] HWND: {:?}, Class Name:  {}, Window Text: {}", count, element.0, element.1, element.2);
-    }
+    // for (count, element) in hwnds.iter().enumerate() {        
+    //     println!("[{}] HWND: {:?}, Class Name:  {}, Window Text: {}", count, element.0, element.1, element.2);
+    // }
     
 
-    println!("Please enter a number:");
+    //println!("Please enter a number:");
 
-    let mut input = String::new();
+   // let mut input = String::new();
 
     // Read input from the user
-    io::stdin().read_line(&mut input)
-        .expect("Failed to read line");
+    // io::stdin().read_line(&mut input)
+    //     .expect("Failed to read line");
 
-    // Parse the input string into an integer
-    let number: usize = match input.trim().parse() {
-        Ok(num) => num,
-        Err(_) => {
-            println!("Invalid input, please enter a valid number.");
-            return; // Exit the program or handle the error as appropriate
-        }
-    };
+    // // Parse the input string into an integer
+    // let number: usize = match input.trim().parse() {
+    //     Ok(num) => num,
+    //     Err(_) => {
+    //         println!("Invalid input, please enter a valid number.");
+    //         return; // Exit the program or handle the error as appropriate
+    //     }
+    // };
 
-    let selected = hwnds.get(number).unwrap();
-    let window_handle = selected.0 as u64;
-    println!("You selected: {}", selected.2);
+   // let selected = hwnds.get(number).unwrap();
+   // let window_handle = selected.0 as u64;
+   // println!("You selected: {}", selected.2);
     
+    let window_handle = 0 as u64;
+
     // Create the elements
     let d3d11screencapturesrc = gstreamer::ElementFactory::make("d3d11screencapturesrc")
         .name("d3d11screencapturesrc")
@@ -156,7 +158,7 @@ pub fn run(tx_video: Sender<Vec<u8>>) {
                 // memory region we mapped as an array of signed 16 bit integers.
                 let samples = map.as_slice();
                 tx_video.send(samples.to_vec()).expect("Error enviando sample");
-                println!("{:?}", samples);
+                
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })

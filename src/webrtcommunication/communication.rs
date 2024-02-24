@@ -5,7 +5,7 @@ use base64::Engine;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use webrtc::api::interceptor_registry::register_default_interceptors;
-use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_OPUS};
+use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264, MIME_TYPE_OPUS};
 use webrtc::api::{APIBuilder, API};
 use webrtc::ice_transport::ice_server::RTCIceServer;
 use webrtc::interceptor::registry::Registry;
@@ -16,7 +16,7 @@ use webrtc::rtp_transceiver::rtp_codec::{
     RTCRtpCodecCapability, RTCRtpCodecParameters, RTPCodecType,
 };
 
-use crate::utils::webrtc_const::{CHANNELS, PAYLOAD_TYPE, SAMPLE_RATE};
+use crate::utils::webrtc_const::{AUDIO_PAYLOAD_TYPE, AUDIO_SAMPLE_RATE, AUDIO_CHANNELS, VIDEO_PAYLOAD_TYPE, VIDEO_SAMPLE_RATE, VIDEO_CHANNELS};
 
 /// Represents the WebRtc connection with other peer
 ///
@@ -82,17 +82,34 @@ fn create_api() -> Result<API, Error> {
         RTCRtpCodecParameters {
             capability: RTCRtpCodecCapability {
                 mime_type: MIME_TYPE_OPUS.to_owned(),
-                clock_rate: SAMPLE_RATE,
-                channels: CHANNELS,
+                clock_rate: AUDIO_SAMPLE_RATE,
+                channels: AUDIO_CHANNELS,
                 sdp_fmtp_line: "".to_owned(),
                 rtcp_feedback: vec![],
             },
-            payload_type: PAYLOAD_TYPE,
+            payload_type: AUDIO_PAYLOAD_TYPE,
             ..Default::default()
         },
         RTPCodecType::Audio,
     ) {
-        return Err(Error::new(ErrorKind::Other, "Error registering codec"));
+        return Err(Error::new(ErrorKind::Other, "Error registering OPUS codec"));
+    }
+
+    if let Err(_val) = m.register_codec(
+        RTCRtpCodecParameters {
+            capability: RTCRtpCodecCapability {
+                mime_type: MIME_TYPE_H264.to_owned(),
+                clock_rate: VIDEO_SAMPLE_RATE,
+                channels: VIDEO_CHANNELS,
+                sdp_fmtp_line: "".to_owned(),
+                rtcp_feedback: vec![],
+            },
+            payload_type: VIDEO_PAYLOAD_TYPE,
+            ..Default::default()
+        },
+        RTPCodecType::Video,
+    ) {
+        return Err(Error::new(ErrorKind::Other, "Error registering H264 codec"));
     }
 
     let mut registry = Registry::new();

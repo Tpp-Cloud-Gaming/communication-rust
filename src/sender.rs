@@ -31,7 +31,7 @@ use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSampl
 use webrtc::track::track_local::TrackLocal;
 
 use crate::utils::webrtc_const::{
-    AUDIO_TRACK_ID, CHANNELS, SAMPLE_RATE, SEND_TRACK_LIMIT, SEND_TRACK_THRESHOLD, STREAM_TRACK_ID, STUN_ADRESS
+    AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_TRACK_ID, SEND_TRACK_LIMIT, SEND_TRACK_THRESHOLD, STREAM_TRACK_ID, STUN_ADRESS, VIDEO_TRACK_ID
 };
 use crate::webrtcommunication::latency::Latency;
 
@@ -60,16 +60,16 @@ async fn main() -> Result<(), Error> {
     let notify_video = notify_tx.clone();
 
     let _stream = check_error(audio_capture.start(), &shutdown).await?;
-    // thread::spawn( move || {
-    //     run(tx_video);
-    // });
+    thread::spawn( move || {
+        run(tx_video);
+    });
     
     
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
 
     let pc = comunication.get_peer();
     let (rtp_sender, audio_track) = create_track(pc.clone(), shutdown.clone(),MIME_TYPE_OPUS,AUDIO_TRACK_ID).await?;
-    let (rtp_video_sender,video_track) = create_track(pc.clone(), shutdown.clone(),MIME_TYPE_H264,"video").await?;
+    let (rtp_video_sender,video_track) = create_track(pc.clone(), shutdown.clone(),MIME_TYPE_H264,VIDEO_TRACK_ID).await?;
 
     // Start the latency measurement
     check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
@@ -95,7 +95,6 @@ async fn main() -> Result<(), Error> {
     });
     
     set_peer_events(&pc, notify_tx, done_tx);
-    println!("Hasta aca llega");
     
     // Create an answer to send to the other process
     let offer = match pc.create_offer(None).await {
@@ -105,7 +104,6 @@ async fn main() -> Result<(), Error> {
             return Err(Error::new(ErrorKind::Other, "Error creating offer"));
         }
     };
-    println!("Hasta aca no llega");
     // Create channel that is blocked until ICE Gathering is complete
     let mut gather_complete = pc.gathering_complete_promise().await;
     
@@ -305,7 +303,7 @@ async fn start_audio_sending(
             }
         };
         let sample_duration =
-            Duration::from_millis((CHANNELS as u64 * 10000000) / SAMPLE_RATE as u64); //TODO: no hardcodear
+            Duration::from_millis((AUDIO_CHANNELS as u64 * 10000000) / AUDIO_SAMPLE_RATE as u64); //TODO: no hardcodear
 
         if let Err(err) = audio_track
             .write_sample(&Sample {

@@ -7,6 +7,7 @@ use std::sync::Arc;
 use utils::error_tracker::ErrorTracker;
 use utils::shutdown;
 use utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
+use webrtc::api::media_engine::MIME_TYPE_H264;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{
@@ -159,9 +160,20 @@ fn set_on_track_handler(
             let tx_decoder_cpy = tx_decoder_1.clone();
             let shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
-                log::info!("RECEIVER | Got OPUS Track");
+                println!("RECEIVER | Got OPUS Track");
                 tokio::spawn(async move {
-                    let _ = read_track(track, &tx_decoder_cpy, shutdown_cpy).await;
+                    let _ = read_audio_track(track, &tx_decoder_cpy, shutdown_cpy).await;
+                });
+            });
+        };
+
+        // Check if is a audio track
+        if mime_type == MIME_TYPE_H264.to_lowercase() {
+            let shutdown_cpy = shutdown.clone();
+            return Box::pin(async move {
+                println!("RECEIVER | Got H264 Track");
+                tokio::spawn(async move {
+                    let _ = read_video_track(track,  shutdown_cpy).await;
                 });
             });
         };
@@ -197,7 +209,7 @@ fn set_on_track_handler(
 //     ));
 // }
 
-async fn read_track(
+async fn read_audio_track(
     track: Arc<TrackRemote>,
     tx: &Sender<f32>,
     shutdown: shutdown::Shutdown,
@@ -239,6 +251,42 @@ async fn read_track(
                         let _ = tx.try_send(v);
                     }
                     error_tracker.increment();
+                }else if error_tracker.increment_with_error(){
+                        log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
+                        shutdown.notify_error(false).await;
+                        return Err(Error::new(ErrorKind::Other, "Error reading RTP packet"));
+                }else{
+                        log::warn!("RECEIVER | Error reading RTP packet");
+                };
+
+            }
+            _ = tokio::signal::ctrl_c() => {
+                return Ok(());
+            }
+            _= shutdown.wait_for_error() => {
+                println!("Se cerro el read track");
+                return Ok(());
+            }
+        }
+    }
+}
+
+
+async fn read_video_track(
+    track: Arc<TrackRemote>,
+    shutdown: shutdown::Shutdown,
+) -> Result<(), Error> {
+    let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
+    shutdown.add_task().await;
+
+    loop {
+        tokio::select! {
+            result = track.read_rtp() => {
+                if let Ok((rtp_packet, _)) = result {
+
+                    let value = rtp_packet.payload.to_vec();
+                    println!("video_packet: {:?}", value);
+
                 }else if error_tracker.increment_with_error(){
                         log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
                         shutdown.notify_error(false).await;

@@ -1,4 +1,4 @@
-use std::{io, sync::mpsc::Sender};
+use std::{sync::mpsc::Sender};
 use gstreamer::{element_error,prelude::*};
 use winapi::{ shared::{minwindef::{BOOL, LPARAM, TRUE}, windef::HWND}, um::winuser::{EnumWindows, GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible}};
 

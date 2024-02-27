@@ -10,25 +10,45 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
     let width = 1920;
     let height = 1080;
 
+
     // Create caps for H.264
-    let caps = gstreamer::Caps::builder("video/x-h264")
-        .field("width", &width)
-        .field("height", &height)
-        .field("stream-format", &"byte-stream") // Set stream-format to byte-stream for H.264
-        .field("alignment", &"au") // Set alignment to au for H.264
-        .field("profile", &"baseline") // Set profile to baseline for H.264
+    // let caps = gstreamer::Caps::builder("video/x-h264")
+    //     .field("width", &width)
+    //     .field("height", &height)
+    //     .field("stream-format", &"byte-stream") // Set stream-format to byte-stream for H.264
+    //     .field("alignment", &"au") // Set alignment to au for H.264
+    //     .field("profile", &"baseline") // Set profile to baseline for H.264
+    //     .build();
+    
+    // Create caps for H.264
+    // let caps = gstreamer::Caps::builder("application/x-rtp")
+    //     .build();
+
+        // Create the caps
+    let caps = gstreamer::Caps::builder("application/x-rtp")
+        .field("media", "video")
+        .field("clock-rate", 90000)
+        .field("encoding-name", "H264")
         .build();
+    //let caps = &gstreamer_video::VideoCapsBuilder::for_encoding("video/x-h264").build();
+    // pipelineStr := "appsrc format=time is-live=true do-timestamp=true name=src ! application/x-rtp"
 
     let source = gstreamer_app::AppSrc::builder()
         .caps(&caps)
         .format(gstreamer::Format::Time)
+        .is_live(true)
+        .do_timestamp(true)
         .build();
+
+    let rtph264depay = gstreamer::ElementFactory::make("rtph264depay")
+        .name("rtph264depay")
+        .build()
+        .expect("Could not create rtph264depay element.");
 
     let d3d11h264dec = gstreamer::ElementFactory::make("d3d11h264dec")
         .name("d3d11h264dec")
         .build()
         .expect("Could not create d3d11h264dec element.");
-
 
 
     let d3d11videosink = gstreamer::ElementFactory::make("d3d11videosink")
@@ -40,15 +60,14 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
     // Create the empty pipeline
     let pipeline = gstreamer::Pipeline::with_name("pipeline");
 
-    pipeline.add_many([source.upcast_ref(), &d3d11h264dec, &d3d11videosink]).unwrap();
-    gstreamer::Element::link_many([source.upcast_ref(), &d3d11h264dec, &d3d11videosink]).unwrap();
+    pipeline.add_many([source.upcast_ref(), &rtph264depay, &d3d11h264dec, &d3d11videosink]).unwrap();
+    gstreamer::Element::link_many([source.upcast_ref(), &rtph264depay, &d3d11h264dec, &d3d11videosink]).unwrap();
 
      // Start playing
     pipeline
     .set_state(gstreamer::State::Playing)
     .expect("Unable to set the pipeline to the `Playing` state");
 
-    let mut i = 0;
     source.set_callbacks(
         // Since our appsrc element operates in pull mode (it asks us to provide data),
         // we add a handler for the need-data callback and provide new data from there.
@@ -58,14 +77,16 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
         // this handler will be called (on average) twice per second.
         gstreamer_app::AppSrcCallbacks::builder()
             .need_data(move |appsrc, _| {
-                // We only produce 100 frames
-                i += 1;
-
-                // appsrc already handles the error here
-                let frame = rx_video.recv().unwrap();
-                let buffer = gstreamer::Buffer::from_slice(frame);
                 
-                let _  = appsrc.push_buffer(buffer);
+                // appsrc already handles the error here
+                
+                let frame = rx_video.recv().unwrap();
+
+                //println!("{:?}", appsrc.current_level_bytes());
+                // println!("APPSRC: {:?}", frame );
+                let buffer = gstreamer::Buffer::from_slice(frame);
+
+                appsrc.push_buffer(buffer).unwrap();
 
             })
             .build(),

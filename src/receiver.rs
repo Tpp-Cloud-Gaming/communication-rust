@@ -67,15 +67,17 @@ async fn main() -> Result<(), Error> {
     };
 
 
+
+
+    let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
+
+    let peer_connection = comunication.get_peer();
+
     // Create video frame channels
     let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
     thread::spawn( move || {
         run(rx_video);
     });
-
-    let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
-
-    let peer_connection = comunication.get_peer();
 
     // Set a handler for when a new remote track starts, this handler saves buffers to disk as
     // an ivf file, since we could have multiple video tracks we provide a counter.
@@ -294,12 +296,17 @@ async fn read_video_track(
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
     shutdown.add_task().await;
 
+    let mut buff: [u8; 1400] = [0;1400];
+    
     loop {
         tokio::select! {
+            
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
-
+                    //println!("RTP_PACKET: {:?}", rtp_packet);
                     let value = rtp_packet.payload.to_vec();
+                    // println!("LEN_DATA: {:?}", value.len());
+                    // println!("{:?}", value);
                     tx.send(value).unwrap();
 
                 }else if error_tracker.increment_with_error(){
@@ -320,6 +327,7 @@ async fn read_video_track(
             }
         }
     }
+    Ok(())
 }
 
 fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown::Shutdown) {

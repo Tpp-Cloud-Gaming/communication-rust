@@ -301,13 +301,13 @@ async fn read_video_track(
     loop {
         tokio::select! {
             
-            result = track.read_rtp() => {
+            result = track.read(&mut buff) => {
                 if let Ok((rtp_packet, _)) = result {
                     //println!("RTP_PACKET: {:?}", rtp_packet);
-                    let value = rtp_packet.payload.to_vec();
+                    //let value = rtp_packet.payload.to_vec();
                     // println!("LEN_DATA: {:?}", value.len());
                     // println!("{:?}", value);
-                    tx.send(value).unwrap();
+                    tx.send(buff.to_vec()).unwrap();
 
                 }else if error_tracker.increment_with_error(){
                         log::error!("RECEIVER | Max Attemps | Error reading RTP packet");

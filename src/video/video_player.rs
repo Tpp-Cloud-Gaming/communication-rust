@@ -45,6 +45,11 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
         .build()
         .expect("Could not create rtph264depay element.");
 
+    let h264parse = gstreamer::ElementFactory::make("h264parse")
+        .name("h264parse")
+        .build()
+        .expect("Could not create rtph264depay element.");
+
     let d3d11h264dec = gstreamer::ElementFactory::make("d3d11h264dec")
         .name("d3d11h264dec")
         .build()
@@ -60,8 +65,8 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
     // Create the empty pipeline
     let pipeline = gstreamer::Pipeline::with_name("pipeline");
 
-    pipeline.add_many([source.upcast_ref(), &rtph264depay, &d3d11h264dec, &d3d11videosink]).unwrap();
-    gstreamer::Element::link_many([source.upcast_ref(), &rtph264depay, &d3d11h264dec, &d3d11videosink]).unwrap();
+    pipeline.add_many([source.upcast_ref(), &rtph264depay, &h264parse, &d3d11h264dec, &d3d11videosink]).unwrap();
+    gstreamer::Element::link_many([source.upcast_ref(), &rtph264depay, &h264parse, &d3d11h264dec, &d3d11videosink]).unwrap();
 
      // Start playing
     pipeline

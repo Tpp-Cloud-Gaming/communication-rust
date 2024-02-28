@@ -111,11 +111,14 @@ impl Latency {
                         return;
                     }
                 };
-                if time.checked_sub(rec_time).is_none() {
-                    log::error!("LATENCY | Error calculating difference");
-                    return;
-                }
-                log::debug!("LATENCY | Difference: {} milliseconds", time);
+                let result = match time.checked_sub(rec_time) {
+                    None => {
+                        log::error!("LATENCY | Error calculating difference");
+                        return;
+                    }
+                    Some(t) => t,
+                };
+                log::info!("LATENCY CHECK | Difference: {} milliseconds", result);
             })
         }));
 

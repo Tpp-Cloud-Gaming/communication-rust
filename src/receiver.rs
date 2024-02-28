@@ -3,16 +3,15 @@ pub mod utils;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
-use std::time::Duration;
 
-use tokio::sync::Notify;
-
+use utils::error_tracker::ErrorTracker;
+use utils::shutdown;
+use utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{
-    api::media_engine::MIME_TYPE_OPUS, ice_transport::ice_connection_state::RTCIceConnectionState,
-    rtcp::payload_feedbacks::picture_loss_indication::PictureLossIndication,
-    rtp_transceiver::rtp_codec::RTPCodecType, track::track_remote::TrackRemote,
+    api::media_engine::MIME_TYPE_OPUS, rtp_transceiver::rtp_codec::RTPCodecType,
+    track::track_remote::TrackRemote,
 };
 
 use std::sync::Mutex;
@@ -23,6 +22,7 @@ use cpal::traits::StreamTrait;
 use crate::audio::audio_decoder::AudioDecoder;
 use crate::utils::common_utils::get_args;
 use crate::utils::latency_const::LATENCY_CHANNEL_LABEL;
+use crate::utils::shutdown::Shutdown;
 use crate::utils::webrtc_const::{ENCODE_BUFFER_SIZE, STUN_ADRESS};
 use crate::webrtcommunication::communication::{encode, Communication};
 use crate::webrtcommunication::latency::Latency;
@@ -31,6 +31,7 @@ use crate::webrtcommunication::latency::Latency;
 async fn main() -> Result<(), Error> {
     // Initialize Log:
     env_logger::builder().format_target(false).init();
+    let shutdown = Shutdown::new();
 
     //Check for CLI args
     let audio_device = get_args();
@@ -61,17 +62,14 @@ async fn main() -> Result<(), Error> {
 
     let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
-    let notify_tx = Arc::new(Notify::new());
-    let notify_rx = notify_tx.clone();
-
     let peer_connection = comunication.get_peer();
 
     // Set a handler for when a new remote track starts, this handler saves buffers to disk as
     // an ivf file, since we could have multiple video tracks we provide a counter.
     // In your application this is where you would handle/process video
-    set_on_track_handler(&peer_connection, notify_rx, tx_decoder_1);
+    set_on_track_handler(&peer_connection, tx_decoder_1, shutdown.clone());
 
-    channel_handler(&peer_connection);
+    channel_handler(&peer_connection, shutdown.clone());
 
     // Allow us to receive 1 audio track
     if peer_connection
@@ -85,11 +83,7 @@ async fn main() -> Result<(), Error> {
         ));
     }
 
-    let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
-
-    // Set the handler for ICE connection state
-    // This will notify you when the peer has connected/disconnected
-    set_on_ice_connection_state_change_handler(&peer_connection, notify_tx, done_tx);
+    //set_on_ice_connection_state_change_handler(&peer_connection, shutdown.clone());
 
     // Set the remote SessionDescription: ACA METER USER INPUT Y PEGAR EL SDP
     // Wait for the offer to be pasted
@@ -130,12 +124,12 @@ async fn main() -> Result<(), Error> {
 
     println!("Press ctrl-c to stop");
     tokio::select! {
-        _ = done_rx.recv() => {
-            log::info!("RECEIVER | Received done signal");
-        }
         _ = tokio::signal::ctrl_c() => {
-            log::info!("RECEIVER | Received done signal222");
+            log::info!("RECEIVER | ctrl-c signal");
             println!();
+        }
+        _ = shutdown.wait_for_shutdown() => {
+            log::info!("RECEIVER | Error notifier signal");
         }
     };
 
@@ -146,141 +140,137 @@ async fn main() -> Result<(), Error> {
         ));
     }
 
+    shutdown.shutdown();
+
     Ok(())
 }
 
 fn set_on_track_handler(
     peer_connection: &Arc<RTCPeerConnection>,
-    notify_rx: Arc<Notify>,
     tx_decoder_1: Sender<f32>,
+    shutdown: shutdown::Shutdown,
 ) {
-    let pc = Arc::downgrade(peer_connection);
-
     peer_connection.on_track(Box::new(move |track, _, _| {
-        // Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
-        let media_ssrc = track.ssrc();
-        let pc2 = pc.clone();
-        tokio::spawn(async move {
-            let mut result = anyhow::Result::<usize>::Ok(0);
-            while result.is_ok() {
-                let timeout = tokio::time::sleep(Duration::from_secs(3));
-                tokio::pin!(timeout);
+        let codec = track.codec();
+        let mime_type = codec.capability.mime_type.to_lowercase();
 
-                tokio::select! {
-                    _ = timeout.as_mut() =>{
-                        if let Some(pc) = pc2.upgrade(){
-                            result = pc.write_rtcp(&[Box::new(PictureLossIndication{
-                                sender_ssrc: 0,
-                                media_ssrc,
-                            })]).await.map_err(Into::into);
-                        }else{
-                            break;
-                        }
-                    }
-                };
-            }
-        });
-
-        let notify_rx2 = Arc::clone(&notify_rx);
-        let decoder = match AudioDecoder::new() {
-            Ok(decoder) => decoder,
-            Err(e) => {
-                log::error!("RECEIVER | Error creating audio decoder: {e}"); //TODO: retornar error
-                return Box::pin(async {});
-            }
+        // Check if is a audio track
+        if mime_type == MIME_TYPE_OPUS.to_lowercase() {
+            let tx_decoder_cpy = tx_decoder_1.clone();
+            let shutdown_cpy = shutdown.clone();
+            return Box::pin(async move {
+                log::info!("RECEIVER | Got OPUS Track");
+                tokio::spawn(async move {
+                    let _ = read_track(track, &tx_decoder_cpy, shutdown_cpy).await;
+                });
+            });
         };
 
-        let tx_decoder_1_clone = tx_decoder_1.clone();
-        Box::pin(async move {
-            let codec = track.codec();
-            let mime_type = codec.capability.mime_type.to_lowercase();
-            if mime_type == MIME_TYPE_OPUS.to_lowercase() {
-                log::info!("RECEIVER | Got OPUS Track");
-
-                tokio::spawn(async move {
-                    let _ = read_track(track, notify_rx2, decoder, &tx_decoder_1_clone).await;
-                });
-            }
-        })
+        Box::pin(async {})
     }));
 }
 
-fn set_on_ice_connection_state_change_handler(
-    peer_connection: &Arc<RTCPeerConnection>,
-    notify_tx: Arc<Notify>,
-    done_tx: Sender<()>,
-) {
-    peer_connection.on_ice_connection_state_change(Box::new(
-        move |connection_state: RTCIceConnectionState| {
-            log::info!("RECEIVER | ICE Connection State has changed | {connection_state}");
+//Esta funcion solo sirve para que detecte si algun on ice pasa a connection state failed y ahi
+// mande un signal para que todo termine
 
-            if connection_state == RTCIceConnectionState::Connected {
-                println!("Ctrl+C the remote client to stop the demo");
-            } else if connection_state == RTCIceConnectionState::Failed {
-                notify_tx.notify_waiters();
+// Set the handler for ICE connection state
+// This will notify you when the peer has connected/disconnected
+// fn set_on_ice_connection_state_change_handler(
+//     peer_connection: &Arc<RTCPeerConnection>,
+//     _shutdown: shutdown::Shutdown,
+// ) {
+//     peer_connection.on_ice_connection_state_change(Box::new(
+//         move |connection_state: RTCIceConnectionState| {
+//             log::info!("RECEIVER | ICE Connection State has changed | {connection_state}");
 
-                let _ = done_tx.try_send(());
-            }
-            Box::pin(async {})
-        },
-    ));
-}
+//             // if connection_state == RTCIceConnectionState::Connected {
+//             //     //let shutdown_cpy = shutdown.clone();
+//             // } else if connection_state == RTCIceConnectionState::Failed {
+//             //     TODO: ver que hacer en este escenario
+//             //     let shutdown_cpy = shutdown.clone();
+//             //     _ = Box::pin(async move {
+//             //         shutdown_cpy.notify_error(true).await;
+//             //     });
+//             // }
+//             Box::pin(async {})
+//         },
+//     ));
+// }
 
 async fn read_track(
     track: Arc<TrackRemote>,
-    notify: Arc<Notify>,
-    mut decoder: AudioDecoder,
     tx: &Sender<f32>,
+    shutdown: shutdown::Shutdown,
 ) -> Result<(), Error> {
-    let mut error_counter = 0;
-    let mut packet_counter = 0;
-    //TODO: probar y usar contantes para este caso de tolerancia de fallos
+    let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
+    shutdown.add_task().await;
+
+    let mut decoder = match AudioDecoder::new() {
+        Ok(decoder) => decoder,
+        Err(e) => {
+            log::error!("RECEIVER | Error creating audio decoder: {e}");
+            shutdown.notify_error(false).await;
+            return Err(Error::new(ErrorKind::Other, "Error creating audio decoder"));
+        }
+    };
+
     loop {
         tokio::select! {
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
+
                     let value = match decoder.decode(rtp_packet.payload.to_vec()){
-                        Ok(value) => value,
+                        Ok(value) => {
+                            error_tracker.increment();
+                            value
+                        },
                         Err(e) => {
-                            log::error!("RECEIVER | Error decoding RTP packet: {e}");
-                            error_counter += 1;
+                            if error_tracker.increment_with_error(){
+                                log::error!("RECEIVER | Max Attemps | Error decoding RTP packet: {e}");
+                                shutdown.notify_error(false).await;
+                                return Err(Error::new(ErrorKind::Other, "Error decoding RTP packet"));
+                            }else{
+                                log::warn!("RECEIVER | Error decoding RTP packet: {e}");
+                            }
                             continue
                         }
                     };
                     for v in value {
                         let _ = tx.try_send(v);
                     }
-
+                    error_tracker.increment();
+                }else if error_tracker.increment_with_error(){
+                        log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
+                        shutdown.notify_error(false).await;
+                        return Err(Error::new(ErrorKind::Other, "Error reading RTP packet"));
                 }else{
-                    log::info!("RECEIVER | Error reading RTP packet");
-                    error_counter += 1;
-                }
-                packet_counter += 1;
+                        log::warn!("RECEIVER | Error reading RTP packet");
+                };
+
             }
-            _ = notify.notified() => {
-                log::info!("RECEIVER | file closing begin after notified");
+            _ = tokio::signal::ctrl_c() => {
+                return Ok(());
             }
-        }
-        if packet_counter == 100 && error_counter > 50 {
-            return Err(Error::new(ErrorKind::Other, "Too many errors"));
-        } else if error_counter == 100 {
-            error_counter = 0;
-            packet_counter = 0;
+            _= shutdown.wait_for_error() => {
+                println!("Se cerro el read track");
+                return Ok(());
+            }
         }
     }
 }
 
-fn channel_handler(peer_connection: &Arc<RTCPeerConnection>) {
+fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown::Shutdown) {
     // Register data channel creation handling
     peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
         let d_label = d.label().to_owned();
 
         if d_label == LATENCY_CHANNEL_LABEL {
+            let shutdown_cpy = shutdown.clone();
             Box::pin(async move {
                 // Start the latency measurement
                 if let Err(e) = Latency::start_latency_receiver(d).await {
                     log::error!("RECEIVER | Error starting latency receiver: {e}");
-                    //TODO: retornar error?
+                    shutdown_cpy.notify_error(false).await;
                 }
             })
         } else {

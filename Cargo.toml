@@ -20,6 +20,7 @@ openh264 = "0.5.0"
 chrono = "0.4.33"
 sntpc = "0.3.7"
 env_logger = "0.10.0"
+winput = "0.2.5"
 
  [[bin]]
  name = "sender"

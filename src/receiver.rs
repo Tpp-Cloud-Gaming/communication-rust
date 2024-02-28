@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod input;
 pub mod utils;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};

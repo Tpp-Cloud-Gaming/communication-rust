@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod input;
 pub mod utils;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
@@ -16,6 +17,7 @@ use crate::webrtcommunication::communication::{encode, Communication};
 
 use tokio::sync::Notify;
 
+use crate::input::input_capture::InputCapture;
 use utils::shutdown;
 use webrtc::api::media_engine::MIME_TYPE_OPUS;
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
@@ -62,6 +64,19 @@ async fn main() -> Result<(), Error> {
 
     // Start the latency measurement
     check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
+
+    // Start mosue and keyboard capture
+    let shutdown_cpy = shutdown.clone();
+    let pc_cpy = pc.clone();
+    //TODO: Retornar errores ?
+    tokio::spawn(async move {
+        InputCapture::new(pc_cpy, shutdown_cpy)
+            .await
+            .unwrap()
+            .start()
+            .await
+            .unwrap();
+    });
 
     let shutdown_cpy_1 = shutdown.clone();
     tokio::spawn(async move {

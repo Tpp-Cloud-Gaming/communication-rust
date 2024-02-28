@@ -102,6 +102,7 @@ async fn main() -> Result<(), Error> {
         let json_str = serde_json::to_string(&local_desc)?;
         let b64 = encode(&json_str);
         println!("{b64}");
+        //println!("{json_str}");
     } else {
         log::error!("SENDER | Generate local_description failed");
         shutdown.notify_error(true).await;

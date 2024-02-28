@@ -30,14 +30,69 @@ impl Communication {
     pub async fn new(stun_adress: String) -> Result<Self, Error> {
         let api = create_api()?;
 
+        // let config = RTCConfiguration {
+        //     ice_servers: vec![RTCIceServer {
+        //         urls: vec![stun_adress.to_owned()],
+        //         ..Default::default()
+        //     }],
+        //     ..Default::default()
+        // };
+
         let config = RTCConfiguration {
-            ice_servers: vec![RTCIceServer {
-                urls: vec![stun_adress.to_owned()],
-                ..Default::default()
-            }],
+            ice_servers: vec![
+                RTCIceServer {
+                    urls: vec![stun_adress.to_owned()],
+                    ..Default::default()
+                },
+                RTCIceServer {
+                    urls: vec![
+                        "turn:ec2-54-232-205-0.sa-east-1.compute.amazonaws.com:3478".to_owned()
+                    ],
+                    username: "username1".to_owned(),
+                    credential: "key1".to_owned(),
+                    credential_type:
+                        webrtc::ice_transport::ice_credential_type::RTCIceCredentialType::Password,
+                },
+            ],
             ..Default::default()
         };
-
+        // let config = RTCConfiguration {
+        //     ice_servers: vec![
+        //         RTCIceServer {
+        //             urls: vec![stun_adress.to_owned()],
+        //             ..Default::default()
+        //         },
+        //         RTCIceServer {
+        //             urls: vec!["turn:global.relay.metered.ca:80".to_owned()],
+        //             username: "c746524136d0d233280283c2".to_owned(),
+        //             credential: "KW+Xc4ju7DIPlrAX".to_owned(),
+        //             credential_type:
+        //                 webrtc::ice_transport::ice_credential_type::RTCIceCredentialType::Password,
+        //         },
+        //         RTCIceServer {
+        //             urls: vec!["turn:global.relay.metered.ca:80?transport=tcp".to_owned()],
+        //             username: "c746524136d0d233280283c2".to_owned(),
+        //             credential: "KW+Xc4ju7DIPlrAX".to_owned(),
+        //             credential_type:
+        //                 webrtc::ice_transport::ice_credential_type::RTCIceCredentialType::Password,
+        //         },
+        //         RTCIceServer {
+        //             urls: vec!["turn:global.relay.metered.ca:443".to_owned()],
+        //             username: "c746524136d0d233280283c2".to_owned(),
+        //             credential: "KW+Xc4ju7DIPlrAX".to_owned(),
+        //             credential_type:
+        //                 webrtc::ice_transport::ice_credential_type::RTCIceCredentialType::Password,
+        //         },
+        //         RTCIceServer {
+        //             urls: vec!["turns:global.relay.metered.ca:443?transport=tcp".to_owned()],
+        //             username: "c746524136d0d233280283c2".to_owned(),
+        //             credential: "KW+Xc4ju7DIPlrAX".to_owned(),
+        //             credential_type:
+        //                 webrtc::ice_transport::ice_credential_type::RTCIceCredentialType::Password,
+        //         },
+        //     ],
+        //     ..Default::default()
+        // };
         // Create a new RTCPeerConnection
         let peer_connection = Arc::new(if let Ok(val) = api.new_peer_connection(config).await {
             val

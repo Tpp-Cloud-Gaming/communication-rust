@@ -9,6 +9,8 @@ use winput::{Action, Vk};
 
 use crate::utils::shutdown;
 
+use super::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
+
 pub struct InputCapture {
     shutdown: shutdown::Shutdown,
     keyboard_channel: Arc<RTCDataChannel>,
@@ -21,7 +23,7 @@ impl InputCapture {
         shutdown: shutdown::Shutdown,
     ) -> Result<InputCapture, Error> {
         let keyboard_channel: Arc<RTCDataChannel> =
-            match pc.create_data_channel("KEYBOARD", None).await {
+            match pc.create_data_channel(KEYBOARD_CHANNEL_LABEL, None).await {
                 Ok(ch) => ch,
                 Err(_) => {
                     return Err(Error::new(
@@ -30,15 +32,16 @@ impl InputCapture {
                     ))
                 }
             };
-        let mouse_channel: Arc<RTCDataChannel> = match pc.create_data_channel("MOUSE", None).await {
-            Ok(ch) => ch,
-            Err(_) => {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Error creating latency data channel",
-                ))
-            }
-        };
+        let mouse_channel: Arc<RTCDataChannel> =
+            match pc.create_data_channel(MOUSE_CHANNEL_LABEL, None).await {
+                Ok(ch) => ch,
+                Err(_) => {
+                    return Err(Error::new(
+                        ErrorKind::Other,
+                        "Error creating latency data channel",
+                    ))
+                }
+            };
 
         Ok(InputCapture {
             shutdown,
@@ -95,12 +98,17 @@ async fn start_handler(
             }
             message_loop::Event::MouseMoveRelative { x, y } => {
                 println!("Mouse moved relative: x: {}, y: {}", x, y);
-                //TODO: obviamente revisar esto, es solo prueba y se tiene que validar que el channel este abierto primero
-                mouse_channel
-                    .send_text(std::format!("{} {}", x, y).as_str())
-                    .await
-                    .unwrap();
-                //mouse_channel.send(&[x as u8, y as u8]).await.unwrap();
+                //TODO: chequea que este en abierto en canal (ver si es la mejor forma), se podria validar caso de error aca?, ver si conviene trasmitir bytes en vez de texto, sacar unwraps
+                if mouse_channel.ready_state()
+                    == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
+                {
+                    mouse_channel
+                        .send_text(std::format!("{} {}", x, y).as_str())
+                        .await
+                        .unwrap();
+                } else {
+                    println!("Mouse channel is not open");
+                }
             }
             _ => (),
         }

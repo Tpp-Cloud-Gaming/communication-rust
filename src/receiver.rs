@@ -5,6 +5,7 @@ pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 
+use input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
 use utils::error_tracker::ErrorTracker;
 use utils::shutdown;
 use utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
@@ -274,6 +275,12 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
                     shutdown_cpy.notify_error(false).await;
                 }
             })
+        } else if d_label == MOUSE_CHANNEL_LABEL {
+            //TODO: HANDLEAR MOUSE CHANNEL
+            Box::pin(async {})
+        } else if d_label == KEYBOARD_CHANNEL_LABEL {
+            //TODO: HANDLEAR KEYBOARD CHANNEL
+            Box::pin(async {})
         } else {
             Box::pin(async move {
                 log::info!("RECEIVER |New DataChannel has been opened | {d_label}");

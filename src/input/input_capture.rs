@@ -94,14 +94,18 @@ async fn start_handler(
                 if vk == Vk::Escape {
                     break;
                 } else {
-                    let keyboard_channel = mouse_channel.clone();
-                    tokio::task::spawn(async move {
-                        let mut vk_txt = vk.into_u8().to_string();
-                        keyboard_channel
-                            .send_text('p'.to_string() + &vk_txt)
-                            .await
-                            .unwrap();
-                    });
+                    if keyboard_channel.ready_state()
+                        == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
+                    {
+                        let keyboard_channel = mouse_channel.clone();
+                        tokio::task::spawn(async move {
+                            let mut vk_txt = vk.into_u8().to_string();
+                            keyboard_channel
+                                .send_text(std::format!("p{}", vk_txt).as_str())
+                                .await
+                                .unwrap();
+                        });
+                    }
                 }
             }
             message_loop::Event::Keyboard {
@@ -109,17 +113,21 @@ async fn start_handler(
                 action: Action::Release,
                 ..
             } => {
-                let keyboard_channel = mouse_channel.clone();
-                tokio::task::spawn(async move {
-                    let mut vk_txt = vk.into_u8().to_string();
-                    keyboard_channel
-                        .send_text('r'.to_string() + &vk_txt)
-                        .await
-                        .unwrap();
-                });
+                if keyboard_channel.ready_state()
+                    == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
+                {
+                    let keyboard_channel = mouse_channel.clone();
+                    tokio::task::spawn(async move {
+                        let mut vk_txt = vk.into_u8().to_string();
+                        keyboard_channel
+                            .send_text(std::format!("r{}", vk_txt).as_str())
+                            .await
+                            .unwrap();
+                    });
+                }
             }
             message_loop::Event::MouseMoveRelative { x, y } => {
-                println!("Mouse moved relative: x: {}, y: {}", x, y);
+                //println!("Mouse moved relative: x: {}, y: {}", x, y);
                 //TODO: chequea que este en abierto en canal (ver si es la mejor forma), se podria validar caso de error aca?, ver si conviene trasmitir bytes en vez de texto, sacar unwraps
                 if mouse_channel.ready_state()
                     == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
@@ -132,7 +140,7 @@ async fn start_handler(
                             .unwrap();
                     });
                 } else {
-                    println!("Mouse channel is not open");
+                    //println!("Mouse channel is not open");
                 }
             }
             _ => (),

@@ -285,7 +285,9 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
             })
         } else if d_label == KEYBOARD_CHANNEL_LABEL {
             //TODO: HANDLEAR KEYBOARD CHANNEL
-            Box::pin(async {})
+            Box::pin(async {
+                KeyboardController::start_keyboard_controller(d);
+            })
         } else {
             Box::pin(async move {
                 log::info!("RECEIVER |New DataChannel has been opened | {d_label}");

@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod input;
 pub mod utils;
+pub mod output;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
@@ -28,6 +29,8 @@ use crate::utils::shutdown::Shutdown;
 use crate::utils::webrtc_const::{ENCODE_BUFFER_SIZE, STUN_ADRESS};
 use crate::webrtcommunication::communication::{encode, Communication};
 use crate::webrtcommunication::latency::Latency;
+use crate::output::output_controller::MouseController;
+
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -277,7 +280,11 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
             })
         } else if d_label == MOUSE_CHANNEL_LABEL {
             //TODO: HANDLEAR MOUSE CHANNEL
-            Box::pin(async {})
+            Box::pin(async {
+                
+                MouseController::start_mouse_controller(d);
+            })
+           
         } else if d_label == KEYBOARD_CHANNEL_LABEL {
             //TODO: HANDLEAR KEYBOARD CHANNEL
             Box::pin(async {})

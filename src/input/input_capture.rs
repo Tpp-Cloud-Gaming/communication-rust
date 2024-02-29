@@ -102,10 +102,13 @@ async fn start_handler(
                 if mouse_channel.ready_state()
                     == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
                 {
-                    mouse_channel
-                        .send_text(std::format!("{} {}", x, y).as_str())
-                        .await
-                        .unwrap();
+                    let mouse_channel_cpy = mouse_channel.clone();
+                    tokio::task::spawn(async move {
+                        mouse_channel_cpy
+                            .send_text(std::format!("{} {}", x, y).as_str())
+                            .await
+                            .unwrap();
+                    });
                 } else {
                     println!("Mouse channel is not open");
                 }

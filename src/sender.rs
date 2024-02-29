@@ -27,8 +27,9 @@ use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::rtp_transceiver::rtp_sender::RTCRtpSender;
+use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
-use webrtc::track::track_local::TrackLocal;
+use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 
 use crate::utils::webrtc_const::{
     AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_TRACK_ID, SEND_TRACK_LIMIT, SEND_TRACK_THRESHOLD, STREAM_TRACK_ID, STUN_ADRESS, VIDEO_TRACK_ID
@@ -69,7 +70,7 @@ async fn main() -> Result<(), Error> {
 
     let pc = comunication.get_peer();
     let (rtp_sender, audio_track) = create_track(pc.clone(), shutdown.clone(),MIME_TYPE_OPUS,AUDIO_TRACK_ID).await?;
-    let (rtp_video_sender,video_track) = create_track(pc.clone(), shutdown.clone(),MIME_TYPE_H264,VIDEO_TRACK_ID).await?;
+    let (rtp_video_sender,video_track) = create_track_2(pc.clone(), shutdown.clone(),MIME_TYPE_H264,VIDEO_TRACK_ID).await?;
 
     // Start the latency measurement
     check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
@@ -165,6 +166,35 @@ async fn create_track(
     track_id: &str
 ) -> Result<(Arc<RTCRtpSender>, Arc<TrackLocalStaticSample>), Error> {
     let track = Arc::new(TrackLocalStaticSample::new(
+        RTCRtpCodecCapability {
+            mime_type: mime_type.to_owned(),
+            ..Default::default()
+        },
+        track_id.to_owned(),
+        STREAM_TRACK_ID.to_owned(),
+    ));
+    match pc
+        .add_track(Arc::clone(&track) as Arc<dyn TrackLocal + Send + Sync>)
+        .await
+    {
+        Ok(rtp_sender) => Ok((rtp_sender, track)),
+        Err(_) => {
+            shutdown.notify_error(true).await;
+            Err(Error::new(
+                ErrorKind::Other,
+                "Error setting local description",
+            ))
+        }
+    }
+}
+
+async fn create_track_2(
+    pc: Arc<RTCPeerConnection>,
+    shutdown: shutdown::Shutdown,
+    mime_type: &str,
+    track_id: &str
+) -> Result<(Arc<RTCRtpSender>, Arc<TrackLocalStaticRTP>), Error> {
+    let track = Arc::new(TrackLocalStaticRTP::new(
         RTCRtpCodecCapability {
             mime_type: mime_type.to_owned(),
             ..Default::default()
@@ -335,7 +365,7 @@ async fn start_audio_sending(
 async fn start_video_sending(
     notify_video: Arc<Notify>,
     rx: Receiver<Vec<u8>>,
-    video_track: Arc<TrackLocalStaticSample>,
+    video_track: Arc<TrackLocalStaticRTP>,
     shutdown: shutdown::Shutdown,
 ) {
     shutdown.add_task().await;
@@ -368,15 +398,12 @@ async fn start_video_sending(
             }
         };
         
-        let sample_duration =
-            Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
-
+        //let sample_duration =
+        //    Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
+        //println!("Mando {:?}",data);
+        //println!("Largo {:?}",data.len());
         if let Err(err) = video_track
-            .write_sample(&Sample {
-                data: data.into(),
-                duration: sample_duration,
-                ..Default::default()
-            })
+            .write(&data)
             .await
         {
             log::warn!("SENDER | Error writing sample | {}", err);

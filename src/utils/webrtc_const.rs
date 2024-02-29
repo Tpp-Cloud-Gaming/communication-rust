@@ -11,7 +11,7 @@ pub const AUDIO_TRACK_ID: &str = "audio";
 
 // VIDEO
 pub const VIDEO_SAMPLE_RATE: u32 = 90000;
-pub const VIDEO_PAYLOAD_TYPE: u8 = 102;
+pub const VIDEO_PAYLOAD_TYPE: u8 = 96;
 pub const VIDEO_CHANNELS: u16 = 2;
 pub const VIDEO_TRACK_ID: &str = "video";
 

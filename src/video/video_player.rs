@@ -5,33 +5,14 @@ use gstreamer::prelude::*;
 pub fn run(rx_video: Receiver<Vec<u8>>) {
     // Initialize GStreamer
     gstreamer::init().unwrap();
-
-
-    let width = 1920;
-    let height = 1080;
-
-
-    // Create caps for H.264
-    // let caps = gstreamer::Caps::builder("video/x-h264")
-    //     .field("width", &width)
-    //     .field("height", &height)
-    //     .field("stream-format", &"byte-stream") // Set stream-format to byte-stream for H.264
-    //     .field("alignment", &"au") // Set alignment to au for H.264
-    //     .field("profile", &"baseline") // Set profile to baseline for H.264
-    //     .build();
     
-    // Create caps for H.264
-    // let caps = gstreamer::Caps::builder("application/x-rtp")
-    //     .build();
-
-        // Create the caps
+    // Create the caps
     let caps = gstreamer::Caps::builder("application/x-rtp")
         .field("media", "video")
         .field("clock-rate", 90000)
         .field("encoding-name", "H264")
         .build();
-    //let caps = &gstreamer_video::VideoCapsBuilder::for_encoding("video/x-h264").build();
-    // pipelineStr := "appsrc format=time is-live=true do-timestamp=true name=src ! application/x-rtp"
+    
 
     let source = gstreamer_app::AppSrc::builder()
         .caps(&caps)
@@ -65,14 +46,14 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
     // Create the empty pipeline
     let pipeline = gstreamer::Pipeline::with_name("pipeline");
 
-    pipeline.add_many([source.upcast_ref(), &rtph264depay, &h264parse, &d3d11h264dec, &d3d11videosink]).unwrap();
-    gstreamer::Element::link_many([source.upcast_ref(), &rtph264depay, &h264parse, &d3d11h264dec, &d3d11videosink]).unwrap();
+    pipeline.add_many([source.upcast_ref(), &rtph264depay,&h264parse,  &d3d11h264dec, &d3d11videosink]).unwrap();
+    gstreamer::Element::link_many([source.upcast_ref(), &rtph264depay,&h264parse, &d3d11h264dec, &d3d11videosink]).unwrap();
 
      // Start playing
     pipeline
     .set_state(gstreamer::State::Playing)
     .expect("Unable to set the pipeline to the `Playing` state");
-
+    
     source.set_callbacks(
         // Since our appsrc element operates in pull mode (it asks us to provide data),
         // we add a handler for the need-data callback and provide new data from there.

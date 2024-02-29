@@ -296,17 +296,21 @@ async fn read_video_track(
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
     shutdown.add_task().await;
 
-    let mut buff: [u8; 1400] = [0;1400];
+    
     
     loop {
+        let mut buff: [u8; 1400] = [0;1400];
         tokio::select! {
             
             result = track.read(&mut buff) => {
-                if let Ok((rtp_packet, _)) = result {
-                    //println!("RTP_PACKET: {:?}", rtp_packet);
+                if let Ok((_rtp_packet, _)) = result {
+                    //println!("RTP_PACKET: {:?}", rtp_packet.header);
+                    //println!("RTP_PACKET: {:?}", rtp_packet.payload.to_vec());
+
                     //let value = rtp_packet.payload.to_vec();
-                    // println!("LEN_DATA: {:?}", value.len());
-                    // println!("{:?}", value);
+                    //println!("LEN_DATA: {:?}", value.len());
+                    //println!("llega: {:?}", buff);
+                    //println!("largo: {:?}",buff.len());    
                     tx.send(buff.to_vec()).unwrap();
 
                 }else if error_tracker.increment_with_error(){
@@ -327,7 +331,7 @@ async fn read_video_track(
             }
         }
     }
-    Ok(())
+    //Ok(())
 }
 
 fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown::Shutdown) {

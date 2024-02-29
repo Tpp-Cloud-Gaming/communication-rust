@@ -1,4 +1,5 @@
 use std::io::{Error, ErrorKind};
+use std::str::Bytes;
 use std::sync::Arc;
 
 use webrtc::data_channel::RTCDataChannel;
@@ -93,8 +94,29 @@ async fn start_handler(
                 if vk == Vk::Escape {
                     break;
                 } else {
-                    println!("{:?} was pressed!", vk);
+                    let keyboard_channel = mouse_channel.clone();
+                    tokio::task::spawn(async move {
+                        let mut vk_txt = vk.into_u8().to_string();
+                        keyboard_channel
+                            .send_text('p'.to_string() + &vk_txt)
+                            .await
+                            .unwrap();
+                    });
                 }
+            }
+            message_loop::Event::Keyboard {
+                vk,
+                action: Action::Release,
+                ..
+            } => {
+                let keyboard_channel = mouse_channel.clone();
+                tokio::task::spawn(async move {
+                    let mut vk_txt = vk.into_u8().to_string();
+                    keyboard_channel
+                        .send_text('r'.to_string() + &vk_txt)
+                        .await
+                        .unwrap();
+                });
             }
             message_loop::Event::MouseMoveRelative { x, y } => {
                 println!("Mouse moved relative: x: {}, y: {}", x, y);

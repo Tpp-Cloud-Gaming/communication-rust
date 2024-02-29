@@ -1,1 +1,2 @@
-pub mod output_controller;
+pub mod keyboard_controller;
+pub mod mouse_controller;

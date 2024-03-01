@@ -16,6 +16,7 @@ impl MouseController {
         ch.on_message(Box::new(move |msg: DataChannelMessage| {
             Box::pin(async move {
                 //println!("{:?}", msg.data);
+                
                 let s = String::from_utf8_lossy(&msg.data);
 
                 // Split the string into two parts
@@ -35,9 +36,7 @@ impl MouseController {
                 for _ in 0..x_steps.max(y_steps) {
                     Mouse::move_relative(x_step, y_step);
                 }
-                //println!("x: {}, y: {}", x, y);
-                // Use the parsed integers in the move_relative function
-                //Mouse::move_relative(x, y);
+
             })
         }));
     }

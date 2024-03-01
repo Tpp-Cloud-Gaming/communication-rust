@@ -97,10 +97,10 @@ async fn start_handler(
                     if keyboard_channel.ready_state()
                         == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
                     {
-                        let keyboard_channel = mouse_channel.clone();
+                        let keyboard_channel_cpy = keyboard_channel.clone();
                         tokio::task::spawn(async move {
-                            let mut vk_txt = vk.into_u8().to_string();
-                            keyboard_channel
+                            let vk_txt = vk.into_u8().to_string();
+                            keyboard_channel_cpy
                                 .send_text(std::format!("p{}", vk_txt).as_str())
                                 .await
                                 .unwrap();
@@ -116,10 +116,10 @@ async fn start_handler(
                 if keyboard_channel.ready_state()
                     == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
                 {
-                    let keyboard_channel = mouse_channel.clone();
+                    let keyboard_channel_cpy = keyboard_channel.clone();
                     tokio::task::spawn(async move {
-                        let mut vk_txt = vk.into_u8().to_string();
-                        keyboard_channel
+                        let  vk_txt = vk.into_u8().to_string();
+                        keyboard_channel_cpy
                             .send_text(std::format!("r{}", vk_txt).as_str())
                             .await
                             .unwrap();

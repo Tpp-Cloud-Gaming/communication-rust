@@ -16,12 +16,18 @@ impl KeyboardController {
         ch.on_message(Box::new(move |msg: DataChannelMessage| {
             Box::pin(async move {
                 let s = String::from_utf8_lossy(&msg.data);
-                let (action, key) = s.split_at(0);
+                let (action, rest) = s.split_at(1);
+                
+                let key = rest.parse::<u8>().unwrap();
+                //println!("Key received {:?}", msg.data);
 
                 if action == 'p'.to_string() {
-                    println!("recibo un presionar");
+                    winput::press(unsafe { Vk::from_u8(key) });
+                    
+                    println!("recibo un presionar {:?}", key);
                 } else if action == 'r'.to_string() {
-                    println!("recibo un soltar");
+                    winput::release(unsafe { Vk::from_u8(key) });
+                    println!("recibo un soltar {:?}", key); 
                 }
             })
         }));

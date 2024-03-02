@@ -18,7 +18,7 @@ use webrtc::rtp_transceiver::rtp_codec::{
 
 use crate::utils::webrtc_const::{AUDIO_PAYLOAD_TYPE, AUDIO_SAMPLE_RATE, AUDIO_CHANNELS, VIDEO_PAYLOAD_TYPE, VIDEO_SAMPLE_RATE, VIDEO_CHANNELS};
 use crate::utils::webrtc_const::{
-    CHANNELS, PAYLOAD_TYPE, SAMPLE_RATE, TURN_ADRESS, TURN_PASS, TURN_USER,
+    TURN_ADRESS, TURN_PASS, TURN_USER,
 };
 
 

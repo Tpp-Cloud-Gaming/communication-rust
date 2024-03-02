@@ -8,9 +8,9 @@ use std::io::{Error, ErrorKind};
 use std::sync::{mpsc, Arc};
 use std::thread;
 
+use crate::input::input_capture::InputCapture;
 use crate::video::video_player::run;
 
-use input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
 use utils::error_tracker::ErrorTracker;
 use utils::shutdown;
 use utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
@@ -28,8 +28,6 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use cpal::traits::StreamTrait;
 
 use crate::audio::audio_decoder::AudioDecoder;
-use crate::output::button_controller::ButtonController;
-use crate::output::mouse_controller::MouseController;
 use crate::utils::common_utils::get_args;
 use crate::utils::latency_const::LATENCY_CHANNEL_LABEL;
 use crate::utils::shutdown::Shutdown;
@@ -71,12 +69,25 @@ async fn main() -> Result<(), Error> {
         return Err(Error::new(ErrorKind::Other, "Error playing audio player"));
     };
 
-
+    
 
 
     let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
     let peer_connection = comunication.get_peer();
+
+    // Start mosue and keyboard capture
+    let shutdown_cpy = shutdown.clone();
+    let pc_cpy = peer_connection.clone();
+    //TODO: Retornar errores ?
+    tokio::spawn(async move {
+        InputCapture::new(pc_cpy, shutdown_cpy)
+            .await
+            .unwrap()
+            .start()
+            .await
+            .unwrap();
+    });
 
     // Create video frame channels
     let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
@@ -352,16 +363,6 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
                     log::error!("RECEIVER | Error starting latency receiver: {e}");
                     shutdown_cpy.notify_error(false).await;
                 }
-            })
-        } else if d_label == MOUSE_CHANNEL_LABEL {
-            //TODO: HANDLEAR MOUSE CHANNEL
-            Box::pin(async {
-                MouseController::start_mouse_controller(d);
-            })
-        } else if d_label == KEYBOARD_CHANNEL_LABEL {
-            //TODO: HANDLEAR KEYBOARD CHANNEL
-            Box::pin(async {
-                ButtonController::start_keyboard_controller(d);
             })
         } else {
             Box::pin(async move {

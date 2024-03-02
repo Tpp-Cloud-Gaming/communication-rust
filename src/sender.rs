@@ -19,9 +19,12 @@ use crate::utils::shutdown::Shutdown;
 use crate::video::video_capture::run;
 use crate::webrtcommunication::communication::{encode, Communication};
 
+use input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
+use output::button_controller::ButtonController;
+use output::mouse_controller::MouseController;
 use tokio::sync::Notify;
+use webrtc::data_channel::RTCDataChannel;
 
-use crate::input::input_capture::InputCapture;
 use utils::shutdown;
 use webrtc::api::media_engine::{MIME_TYPE_H264, MIME_TYPE_OPUS};
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
@@ -79,19 +82,8 @@ async fn main() -> Result<(), Error> {
     check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
 
 
-    // Start mosue and keyboard capture
-    let shutdown_cpy = shutdown.clone();
-    let pc_cpy = pc.clone();
-    //TODO: Retornar errores ?
-    tokio::spawn(async move {
-        InputCapture::new(pc_cpy, shutdown_cpy)
-            .await
-            .unwrap()
-            .start()
-            .await
-            .unwrap();
-    });
-
+    channel_handler(&pc, shutdown.clone());    
+    
 
     let shutdown_cpy_1 = shutdown.clone();
     tokio::spawn(async move {
@@ -441,4 +433,27 @@ async fn start_video_sending(
             return;
         }
     }
+}
+
+fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, _shutdown: shutdown::Shutdown) {
+    // Register data channel creation handling
+    peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
+        let d_label = d.label().to_owned();
+
+        if d_label == MOUSE_CHANNEL_LABEL {
+            //TODO: HANDLEAR MOUSE CHANNEL
+            Box::pin(async {
+                MouseController::start_mouse_controller(d);
+            })
+        } else if d_label == KEYBOARD_CHANNEL_LABEL {
+            //TODO: HANDLEAR KEYBOARD CHANNEL
+            Box::pin(async {
+                ButtonController::start_keyboard_controller(d);
+            })
+        } else {
+            Box::pin(async move {
+                log::info!("RECEIVER |New DataChannel has been opened | {d_label}");
+            })
+        }
+    }));
 }

@@ -2,14 +2,19 @@ pub mod audio;
 pub mod input;
 pub mod output;
 pub mod utils;
+pub mod video;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
+use std::thread;
+
+use crate::video::video_player::run;
 
 use input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
 use utils::error_tracker::ErrorTracker;
 use utils::shutdown;
 use utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
+use webrtc::api::media_engine::MIME_TYPE_H264;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{
@@ -35,6 +40,7 @@ use crate::webrtcommunication::latency::Latency;
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     // Initialize Log:
+
     env_logger::builder().format_target(false).init();
     let shutdown = Shutdown::new();
 
@@ -65,14 +71,23 @@ async fn main() -> Result<(), Error> {
         return Err(Error::new(ErrorKind::Other, "Error playing audio player"));
     };
 
+
+
+
     let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
     let peer_connection = comunication.get_peer();
 
+    // Create video frame channels
+    let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
+    thread::spawn( move || {
+        run(rx_video);
+    });
+
     // Set a handler for when a new remote track starts, this handler saves buffers to disk as
     // an ivf file, since we could have multiple video tracks we provide a counter.
     // In your application this is where you would handle/process video
-    set_on_track_handler(&peer_connection, tx_decoder_1, shutdown.clone());
+    set_on_track_handler(&peer_connection, tx_decoder_1, tx_video, shutdown.clone());
 
     channel_handler(&peer_connection, shutdown.clone());
 
@@ -153,6 +168,7 @@ async fn main() -> Result<(), Error> {
 fn set_on_track_handler(
     peer_connection: &Arc<RTCPeerConnection>,
     tx_decoder_1: Sender<f32>,
+    tx_video: mpsc::Sender<Vec<u8>>,
     shutdown: shutdown::Shutdown,
 ) {
     peer_connection.on_track(Box::new(move |track, _, _| {
@@ -164,9 +180,21 @@ fn set_on_track_handler(
             let tx_decoder_cpy = tx_decoder_1.clone();
             let shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
-                log::info!("RECEIVER | Got OPUS Track");
+                println!("RECEIVER | Got OPUS Track");
                 tokio::spawn(async move {
-                    let _ = read_track(track, &tx_decoder_cpy, shutdown_cpy).await;
+                    let _ = read_audio_track(track, &tx_decoder_cpy, shutdown_cpy).await;
+                });
+            });
+        };
+
+        // Check if is a audio track
+        if mime_type == MIME_TYPE_H264.to_lowercase() {
+            let tx_video_cpy = tx_video.clone();
+            let shutdown_cpy = shutdown.clone();
+            return Box::pin(async move {
+                println!("RECEIVER | Got H264 Track");
+                tokio::spawn(async move {
+                    let _ = read_video_track(track,  shutdown_cpy, &tx_video_cpy).await;
                 });
             });
         };
@@ -202,7 +230,7 @@ fn set_on_track_handler(
 //     ));
 // }
 
-async fn read_track(
+async fn read_audio_track(
     track: Arc<TrackRemote>,
     tx: &Sender<f32>,
     shutdown: shutdown::Shutdown,
@@ -262,6 +290,53 @@ async fn read_track(
             }
         }
     }
+}
+
+
+async fn read_video_track(
+    track: Arc<TrackRemote>,
+    shutdown: shutdown::Shutdown,
+    tx: &mpsc::Sender<Vec<u8>>,
+) -> Result<(), Error> {
+    let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
+    shutdown.add_task().await;
+
+    
+    
+    loop {
+        let mut buff: [u8; 1400] = [0;1400];
+        tokio::select! {
+            
+            result = track.read(&mut buff) => {
+                if let Ok((_rtp_packet, _)) = result {
+                    //println!("RTP_PACKET: {:?}", rtp_packet.header);
+                    //println!("RTP_PACKET: {:?}", rtp_packet.payload.to_vec());
+
+                    //let value = rtp_packet.payload.to_vec();
+                    //println!("LEN_DATA: {:?}", value.len());
+                    //println!("llega: {:?}", buff);
+                    //println!("largo: {:?}",buff.len());    
+                    tx.send(buff.to_vec()).unwrap();
+
+                }else if error_tracker.increment_with_error(){
+                        log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
+                        shutdown.notify_error(false).await;
+                        return Err(Error::new(ErrorKind::Other, "Error reading RTP packet"));
+                }else{
+                        log::warn!("RECEIVER | Error reading RTP packet");
+                };
+
+            }
+            _ = tokio::signal::ctrl_c() => {
+                return Ok(());
+            }
+            _= shutdown.wait_for_error() => {
+                println!("Se cerro el read track");
+                return Ok(());
+            }
+        }
+    }
+    //Ok(())
 }
 
 fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown::Shutdown) {

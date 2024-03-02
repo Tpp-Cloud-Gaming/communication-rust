@@ -4,7 +4,7 @@ use std::io::Error;
 
 use crate::utils::webrtc_const::ENCODE_BUFFER_SIZE;
 
-use crate::utils::webrtc_const::SAMPLE_RATE;
+use crate::utils::webrtc_const::AUDIO_SAMPLE_RATE;
 
 pub struct AudioEncoder {
     encoder: Encoder,
@@ -14,7 +14,7 @@ impl AudioEncoder {
     /// Returns new instance of audio encoder.
     pub fn new() -> Result<Self, Error> {
         let encoder =
-            opus::Encoder::new(SAMPLE_RATE, opus::Channels::Stereo, opus::Application::Voip)
+            opus::Encoder::new(AUDIO_SAMPLE_RATE, opus::Channels::Stereo, opus::Application::Voip)
                 .map_err(|e| Error::new(std::io::ErrorKind::Other, e))?;
 
         Ok(Self { encoder })

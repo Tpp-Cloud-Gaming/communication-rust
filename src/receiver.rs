@@ -1,4 +1,6 @@
 pub mod audio;
+pub mod input;
+pub mod output;
 pub mod utils;
 pub mod video;
 pub mod webrtcommunication;
@@ -8,6 +10,7 @@ use std::thread;
 
 use crate::video::video_player::run;
 
+use input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
 use utils::error_tracker::ErrorTracker;
 use utils::shutdown;
 use utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
@@ -25,6 +28,8 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use cpal::traits::StreamTrait;
 
 use crate::audio::audio_decoder::AudioDecoder;
+use crate::output::button_controller::ButtonController;
+use crate::output::mouse_controller::MouseController;
 use crate::utils::common_utils::get_args;
 use crate::utils::latency_const::LATENCY_CHANNEL_LABEL;
 use crate::utils::shutdown::Shutdown;
@@ -347,6 +352,16 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
                     log::error!("RECEIVER | Error starting latency receiver: {e}");
                     shutdown_cpy.notify_error(false).await;
                 }
+            })
+        } else if d_label == MOUSE_CHANNEL_LABEL {
+            //TODO: HANDLEAR MOUSE CHANNEL
+            Box::pin(async {
+                MouseController::start_mouse_controller(d);
+            })
+        } else if d_label == KEYBOARD_CHANNEL_LABEL {
+            //TODO: HANDLEAR KEYBOARD CHANNEL
+            Box::pin(async {
+                ButtonController::start_keyboard_controller(d);
             })
         } else {
             Box::pin(async move {

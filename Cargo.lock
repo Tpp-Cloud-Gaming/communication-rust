@@ -194,6 +194,7 @@ dependencies = [
  "webrtc",
  "winapi",
  "windows-capture",
+ "winput",
 ]
 
 [[package]]
@@ -3221,7 +3222,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a4191c47f15cc3ec71fcb4913cb83d58def65dd3787610213c649283b5ce178"
 dependencies = [
  "memchr",
-]
+ ]
+
+[[package]]
+name = "winput"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd4bec39938e0ae68b300e2a4197b6437f13d53d1c146c6e297e346a71d5dde9"
+dependencies = [
+ "winapi",
+ ]
+
+
 
 [[package]]
 name = "x25519-dalek"

@@ -24,6 +24,8 @@ gstreamer = "0.22.1"
 winapi = { version = "0.3.9", features = ["winuser"] }
 gstreamer-app = "0.22.0"
 gstreamer-video = "0.22.1"
+winput = "0.2.5"
+
 
  [[bin]]
  name = "sender"

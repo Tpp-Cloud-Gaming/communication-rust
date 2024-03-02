@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
-use winput::message_loop;
 use winput::message_loop::EventReceiver;
+use winput::{message_loop, Button};
 use winput::{Action, Vk};
 
 use crate::utils::shutdown;
@@ -118,9 +118,55 @@ async fn start_handler(
                 {
                     let keyboard_channel_cpy = keyboard_channel.clone();
                     tokio::task::spawn(async move {
-                        let  vk_txt = vk.into_u8().to_string();
+                        let vk_txt = vk.into_u8().to_string();
                         keyboard_channel_cpy
                             .send_text(std::format!("r{}", vk_txt).as_str())
+                            .await
+                            .unwrap();
+                    });
+                }
+            }
+            message_loop::Event::MouseButton {
+                action: Action::Press,
+                button,
+            } => {
+                let vk = match button {
+                    Button::Left => "Left",
+                    Button::Right => "Right",
+                    Button::Middle => "Middle",
+                    Button::X1 => "X1",
+                    Button::X2 => "X2",
+                };
+                let keyboard_channel_cpy = keyboard_channel.clone();
+                if keyboard_channel.ready_state()
+                    == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
+                {
+                    tokio::task::spawn(async move {
+                        keyboard_channel_cpy
+                            .send_text(std::format!("m{}", vk).as_str())
+                            .await
+                            .unwrap();
+                    });
+                }
+            }
+            message_loop::Event::MouseButton {
+                action: Action::Release,
+                button,
+            } => {
+                let vk = match button {
+                    Button::Left => 0,
+                    Button::Right => 1,
+                    Button::Middle => 2,
+                    Button::X1 => 3,
+                    Button::X2 => 4,
+                };
+                let keyboard_channel_cpy = keyboard_channel.clone();
+                if keyboard_channel.ready_state()
+                    == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
+                {
+                    tokio::task::spawn(async move {
+                        keyboard_channel_cpy
+                            .send_text(std::format!("t{}", vk).as_str())
                             .await
                             .unwrap();
                     });
@@ -129,6 +175,9 @@ async fn start_handler(
             message_loop::Event::MouseMoveRelative { x, y } => {
                 //println!("Mouse moved relative: x: {}, y: {}", x, y);
                 //TODO: chequea que este en abierto en canal (ver si es la mejor forma), se podria validar caso de error aca?, ver si conviene trasmitir bytes en vez de texto, sacar unwraps
+                if x == 0 && y == 0 {
+                    continue;
+                }
                 if mouse_channel.ready_state()
                     == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
                 {

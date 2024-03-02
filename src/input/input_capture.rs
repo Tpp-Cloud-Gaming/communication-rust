@@ -1,20 +1,18 @@
 use std::io::{Error, ErrorKind};
-use std::str::Bytes;
 use std::sync::Arc;
-
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use winput::message_loop::EventReceiver;
+use winput::Action;
 use winput::{message_loop, Button};
-use winput::{Action, Vk};
-
-use crate::utils::shutdown;
 
 use super::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
+use crate::output::output_const::*;
+use crate::utils::shutdown;
 
 pub struct InputCapture {
     shutdown: shutdown::Shutdown,
-    keyboard_channel: Arc<RTCDataChannel>,
+    button_channel: Arc<RTCDataChannel>,
     mouse_channel: Arc<RTCDataChannel>,
 }
 
@@ -23,7 +21,7 @@ impl InputCapture {
         pc: Arc<RTCPeerConnection>,
         shutdown: shutdown::Shutdown,
     ) -> Result<InputCapture, Error> {
-        let keyboard_channel: Arc<RTCDataChannel> =
+        let button_channel: Arc<RTCDataChannel> =
             match pc.create_data_channel(KEYBOARD_CHANNEL_LABEL, None).await {
                 Ok(ch) => ch,
                 Err(_) => {
@@ -46,7 +44,7 @@ impl InputCapture {
 
         Ok(InputCapture {
             shutdown,
-            keyboard_channel,
+            button_channel,
             mouse_channel,
         })
     }
@@ -57,7 +55,7 @@ impl InputCapture {
         println!("Starting");
         let receiver: EventReceiver = match message_loop::start() {
             Ok(receiver) => receiver,
-            Err(e) => {
+            Err(_e) => {
                 return Err(Error::new(
                     ErrorKind::Other,
                     "Error setting local description",
@@ -69,7 +67,7 @@ impl InputCapture {
             _ = self.shutdown.wait_for_error() => {
                 message_loop::stop();
             }
-            _= start_handler(receiver, self.keyboard_channel.clone(), self.mouse_channel.clone()) => {
+            _ = start_handler(receiver, self.button_channel.clone(), self.mouse_channel.clone(),self.shutdown.clone()) => {
                 message_loop::stop();
                 println!("Stopped");
 
@@ -81,100 +79,77 @@ impl InputCapture {
 
 async fn start_handler(
     receiver: EventReceiver,
-    keyboard_channel: Arc<RTCDataChannel>,
+    button_channel: Arc<RTCDataChannel>,
     mouse_channel: Arc<RTCDataChannel>,
+    shutdown: shutdown::Shutdown,
 ) {
+    let shutdown_cpy = shutdown.clone();
     loop {
+        let shutdown_cpy_loop = shutdown_cpy.clone();
         match receiver.next_event() {
             message_loop::Event::Keyboard {
                 vk,
                 action: Action::Press,
                 ..
             } => {
-                if vk == Vk::Escape {
-                    break;
-                } else {
-                    if keyboard_channel.ready_state()
-                        == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
-                    {
-                        let keyboard_channel_cpy = keyboard_channel.clone();
-                        tokio::task::spawn(async move {
-                            let vk_txt = vk.into_u8().to_string();
-                            keyboard_channel_cpy
-                                .send_text(std::format!("p{}", vk_txt).as_str())
-                                .await
-                                .unwrap();
-                        });
-                    }
-                }
+                let button_channel_cpy = button_channel.clone();
+                tokio::task::spawn(async move {
+                    handle_button_action(
+                        button_channel_cpy,
+                        PRESS_KEYBOARD_ACTION,
+                        vk.into_u8().to_string(),
+                        shutdown_cpy_loop.clone(),
+                    )
+                    .await;
+                });
             }
             message_loop::Event::Keyboard {
                 vk,
                 action: Action::Release,
                 ..
             } => {
-                if keyboard_channel.ready_state()
-                    == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
-                {
-                    let keyboard_channel_cpy = keyboard_channel.clone();
-                    tokio::task::spawn(async move {
-                        let vk_txt = vk.into_u8().to_string();
-                        keyboard_channel_cpy
-                            .send_text(std::format!("r{}", vk_txt).as_str())
-                            .await
-                            .unwrap();
-                    });
-                }
+                let button_channel_cpy = button_channel.clone();
+                tokio::task::spawn(async move {
+                    handle_button_action(
+                        button_channel_cpy,
+                        RELEASE_KEYBOARD_ACTION,
+                        vk.into_u8().to_string(),
+                        shutdown_cpy_loop.clone(),
+                    )
+                    .await;
+                });
             }
             message_loop::Event::MouseButton {
                 action: Action::Press,
                 button,
             } => {
-                let vk = match button {
-                    Button::Left => "Left",
-                    Button::Right => "Right",
-                    Button::Middle => "Middle",
-                    Button::X1 => "X1",
-                    Button::X2 => "X2",
-                };
-                let keyboard_channel_cpy = keyboard_channel.clone();
-                if keyboard_channel.ready_state()
-                    == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
-                {
-                    tokio::task::spawn(async move {
-                        keyboard_channel_cpy
-                            .send_text(std::format!("m{}", vk).as_str())
-                            .await
-                            .unwrap();
-                    });
-                }
+                let button_channel_cpy = button_channel.clone();
+                tokio::task::spawn(async move {
+                    handle_button_action(
+                        button_channel_cpy,
+                        PRESS_MOUSE_ACTION,
+                        button_to_i32(button).to_string(),
+                        shutdown_cpy_loop.clone(),
+                    )
+                    .await;
+                });
             }
             message_loop::Event::MouseButton {
                 action: Action::Release,
                 button,
             } => {
-                let vk = match button {
-                    Button::Left => 0,
-                    Button::Right => 1,
-                    Button::Middle => 2,
-                    Button::X1 => 3,
-                    Button::X2 => 4,
-                };
-                let keyboard_channel_cpy = keyboard_channel.clone();
-                if keyboard_channel.ready_state()
-                    == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
-                {
-                    tokio::task::spawn(async move {
-                        keyboard_channel_cpy
-                            .send_text(std::format!("t{}", vk).as_str())
-                            .await
-                            .unwrap();
-                    });
-                }
+                let button_channel_cpy = button_channel.clone();
+                tokio::task::spawn(async move {
+                    handle_button_action(
+                        button_channel_cpy,
+                        RELEASE_MOUSE_ACTION,
+                        button_to_i32(button).to_string(),
+                        shutdown_cpy_loop.clone(),
+                    )
+                    .await;
+                });
             }
             message_loop::Event::MouseMoveRelative { x, y } => {
-                //println!("Mouse moved relative: x: {}, y: {}", x, y);
-                //TODO: chequea que este en abierto en canal (ver si es la mejor forma), se podria validar caso de error aca?, ver si conviene trasmitir bytes en vez de texto, sacar unwraps
                 if x == 0 && y == 0 {
                     continue;
                 }
@@ -188,11 +163,45 @@ async fn start_handler(
                             .await
                             .unwrap();
                     });
-                } else {
-                    //println!("Mouse channel is not open");
                 }
             }
             _ => (),
         }
+        if shutdown.check_for_error().await {
+            break;
+        };
+    }
+}
+
+async fn handle_button_action(
+    button_channel: Arc<RTCDataChannel>,
+    action: &str,
+    text: String,
+    shutdown: shutdown::Shutdown,
+) -> Result<(), Error> {
+    if button_channel.ready_state()
+        == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
+    {
+        if let Err(_e) = button_channel
+            .send_text(std::format!("{}{}", action, text).as_str())
+            .await
+        {
+            shutdown.notify_error(false).await;
+            return Err(Error::new(
+                ErrorKind::Other,
+                "Error sending message through data channel",
+            ));
+        };
+    }
+    return Ok(());
+}
+
+fn button_to_i32(button: Button) -> i32 {
+    match button {
+        Button::Left => 0,
+        Button::Right => 1,
+        Button::Middle => 2,
+        Button::X1 => 3,
+        Button::X2 => 4,
     }
 }

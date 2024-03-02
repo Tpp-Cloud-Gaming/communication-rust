@@ -23,7 +23,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use cpal::traits::StreamTrait;
 
 use crate::audio::audio_decoder::AudioDecoder;
-use crate::output::keyboard_controller::KeyboardController;
+use crate::output::button_controller::ButtonController;
 use crate::output::mouse_controller::MouseController;
 use crate::utils::common_utils::get_args;
 use crate::utils::latency_const::LATENCY_CHANNEL_LABEL;
@@ -286,7 +286,7 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
         } else if d_label == KEYBOARD_CHANNEL_LABEL {
             //TODO: HANDLEAR KEYBOARD CHANNEL
             Box::pin(async {
-                KeyboardController::start_keyboard_controller(d);
+                ButtonController::start_keyboard_controller(d);
             })
         } else {
             Box::pin(async move {

@@ -65,7 +65,10 @@ pub fn run(tx_video: Sender<Vec<u8>>) {
    let window_handle = selected.0 as u64;
    println!("You selected: {}", selected.2);
     
-    //let window_handle = 0 as u64;
+   let new_framerate= gstreamer::Fraction::new(200, 1);
+   let caps = gstreamer::Caps::builder("video/x-raw")
+       .field("framerate", new_framerate)
+       .build();
 
     // Create the elements
     let d3d11screencapturesrc = gstreamer::ElementFactory::make("d3d11screencapturesrc")
@@ -75,8 +78,9 @@ pub fn run(tx_video: Sender<Vec<u8>>) {
         .build()
         .expect("Could not create d3d11screencapturesrc element.");
 
-    let d3d11convert = gstreamer::ElementFactory::make("d3d11convert")
-        .name("d3d11convert")
+
+    let videoconvert = gstreamer::ElementFactory::make("videoconvert")
+        .name("videoconvert")
         .build()
         .expect("Could not create d3d11convert element.");
 
@@ -108,9 +112,10 @@ pub fn run(tx_video: Sender<Vec<u8>>) {
 
     // Build the pipeline Note that we are NOT linking the source at this
     // point. We will do it later.
-    pipeline.add_many([&d3d11screencapturesrc, &d3d11convert, &mfh264enc, &rtph264pay,/*&h264parse,*/ &sink.upcast_ref()/*, &d3d11h264dec, &d3d11videosink */] ).unwrap();
-
-    gstreamer::Element::link_many([&d3d11screencapturesrc, &d3d11convert, &mfh264enc,&rtph264pay, /*&h264parse,*/ &sink.upcast_ref()/*, &d3d11h264dec, &d3d11videosink */])
+    pipeline.add_many([&d3d11screencapturesrc, &videoconvert, &mfh264enc, &rtph264pay,/*&h264parse,*/ &sink.upcast_ref()/*, &d3d11h264dec, &d3d11videosink */] ).unwrap();
+    
+    d3d11screencapturesrc.link_filtered(&videoconvert, &caps).unwrap();
+    gstreamer::Element::link_many([&videoconvert, &mfh264enc,&rtph264pay, /*&h264parse,*/ &sink.upcast_ref()/*, &d3d11h264dec, &d3d11videosink */])
         .expect("Elements could not be linked.");
 
     // Otra opcion podria ser: pay (pad probe) fakesink    

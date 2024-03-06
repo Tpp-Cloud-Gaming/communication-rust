@@ -8,13 +8,25 @@ pub fn run(tx_audio: Sender<Vec<u8>>) {
     // Initialize GStreamer
     gstreamer::init().unwrap();
 
-    sleep(Duration::from_secs(30));
+    sleep(Duration::from_secs(60));
+
+    let caps = gstreamer::Caps::builder("audio/x-raw")
+        //.field("rate", 48000)
+        .field("channels", 2)
+        .build();
 
     // Create the elements
     let wasapi2src = gstreamer::ElementFactory::make("wasapi2src")
         .name("wasapi2src")
+        .property("loopback", true)
+        .property("low-latency", true)
         .build()
         .expect("Could not create wasapi2src element.");
+
+    let queue = gstreamer::ElementFactory::make("queue")
+        .name("queue")
+        .build()
+        .expect("Could not create audioconvert element.");
 
     let audioconvert = gstreamer::ElementFactory::make("audioconvert")
         .name("audioconvert")
@@ -45,6 +57,7 @@ pub fn run(tx_audio: Sender<Vec<u8>>) {
     pipeline
         .add_many([
             &wasapi2src,
+            &queue,
             &audioconvert,
             &audioresample,
             &opusenc,
@@ -53,8 +66,12 @@ pub fn run(tx_audio: Sender<Vec<u8>>) {
         ])
         .unwrap();
 
+    wasapi2src
+        .link_filtered(&queue, &caps)
+        .unwrap();
+
     gstreamer::Element::link_many([
-        &wasapi2src,
+        &queue,
         &audioconvert,
         &audioresample,
         &opusenc,

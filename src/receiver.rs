@@ -2,6 +2,7 @@ pub mod audio;
 pub mod input;
 pub mod output;
 pub mod utils;
+pub mod sound;
 pub mod video;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
@@ -45,29 +46,29 @@ async fn main() -> Result<(), Error> {
     //Check for CLI args
     let audio_device = get_args();
 
-    let (tx_decoder_1, rx_decoder_1): (Sender<f32>, Receiver<f32>) =
-        tokio::sync::mpsc::channel(ENCODE_BUFFER_SIZE);
-    let audio_player = match audio::audio_player::AudioPlayer::new(
-        audio_device,
-        Arc::new(Mutex::new(rx_decoder_1)),
-    ) {
-        Ok(audio_player) => audio_player,
-        Err(e) => {
-            log::error!("RECEIVER | Error creating audio player: {e}");
-            return Err(Error::new(ErrorKind::Other, "Error creating audio player"));
-        }
-    };
-    let stream = match audio_player.start() {
-        Ok(stream) => stream,
-        Err(e) => {
-            log::error!("RECEIVER | Error starting audio player: {e}");
-            return Err(Error::new(ErrorKind::Other, "Error starting audio player"));
-        }
-    };
-    if let Err(e) = stream.play() {
-        log::error!("RECEIVER | Error playing audio player: {e}");
-        return Err(Error::new(ErrorKind::Other, "Error playing audio player"));
-    };
+    // let (tx_decoder_1, rx_decoder_1): (Sender<i16>, Receiver<i16>) =
+    //     tokio::sync::mpsc::channel(ENCODE_BUFFER_SIZE);
+    // let audio_player = match audio::audio_player::AudioPlayer::new(
+    //     audio_device,
+    //     Arc::new(Mutex::new(rx_decoder_1)),
+    // ) {
+    //     Ok(audio_player) => audio_player,
+    //     Err(e) => {
+    //         log::error!("RECEIVER | Error creating audio player: {e}");
+    //         return Err(Error::new(ErrorKind::Other, "Error creating audio player"));
+    //     }
+    // };
+    // let stream = match audio_player.start() {
+    //     Ok(stream) => stream,
+    //     Err(e) => {
+    //         log::error!("RECEIVER | Error starting audio player: {e}");
+    //         return Err(Error::new(ErrorKind::Other, "Error starting audio player"));
+    //     }
+    // };
+    // if let Err(e) = stream.play() {
+    //     log::error!("RECEIVER | Error playing audio player: {e}");
+    //     return Err(Error::new(ErrorKind::Other, "Error playing audio player"));
+    // };
 
     let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
@@ -92,10 +93,15 @@ async fn main() -> Result<(), Error> {
         run(rx_video);
     });
 
+    let (tx_audio, rx_audio): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
+    thread::spawn(move || {
+        sound::audio_player::run(rx_audio);
+    });
+
     // Set a handler for when a new remote track starts, this handler saves buffers to disk as
     // an ivf file, since we could have multiple video tracks we provide a counter.
     // In your application this is where you would handle/process video
-    set_on_track_handler(&peer_connection, tx_decoder_1, tx_video, shutdown.clone());
+    set_on_track_handler(&peer_connection, tx_audio, tx_video, shutdown.clone());
 
     channel_handler(&peer_connection, shutdown.clone());
 
@@ -175,7 +181,7 @@ async fn main() -> Result<(), Error> {
 
 fn set_on_track_handler(
     peer_connection: &Arc<RTCPeerConnection>,
-    tx_decoder_1: Sender<f32>,
+    tx_audio: mpsc::Sender<Vec<u8>>,
     tx_video: mpsc::Sender<Vec<u8>>,
     shutdown: shutdown::Shutdown,
 ) {
@@ -185,12 +191,12 @@ fn set_on_track_handler(
 
         // Check if is a audio track
         if mime_type == MIME_TYPE_OPUS.to_lowercase() {
-            let tx_decoder_cpy = tx_decoder_1.clone();
+            let tx_audio_cpy = tx_audio.clone();
             let shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
                 println!("RECEIVER | Got OPUS Track");
                 tokio::spawn(async move {
-                    let _ = read_audio_track(track, &tx_decoder_cpy, shutdown_cpy).await;
+                    let _ = read_audio_track(track, &tx_audio_cpy, shutdown_cpy).await;
                 });
             });
         };
@@ -240,46 +246,31 @@ fn set_on_track_handler(
 
 async fn read_audio_track(
     track: Arc<TrackRemote>,
-    tx: &Sender<f32>,
+    tx: &mpsc::Sender<Vec<u8>>,
     shutdown: shutdown::Shutdown,
 ) -> Result<(), Error> {
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
     shutdown.add_task().await;
 
-    let mut decoder = match AudioDecoder::new() {
-        Ok(decoder) => decoder,
-        Err(e) => {
-            log::error!("RECEIVER | Error creating audio decoder: {e}");
-            shutdown.notify_error(false).await;
-            return Err(Error::new(ErrorKind::Other, "Error creating audio decoder"));
-        }
-    };
+    // let mut decoder = match AudioDecoder::new() {
+    //     Ok(decoder) => decoder,
+    //     Err(e) => {
+    //         log::error!("RECEIVER | Error creating audio decoder: {e}");
+    //         shutdown.notify_error(false).await;
+    //         return Err(Error::new(ErrorKind::Other, "Error creating audio decoder"));
+    //     }
+    // };
+
+    
 
     loop {
+
         tokio::select! {
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
+                    let value = rtp_packet.payload.to_vec();
+                    tx.send(value).unwrap();
 
-                    let value = match decoder.decode(rtp_packet.payload.to_vec()){
-                        Ok(value) => {
-                            error_tracker.increment();
-                            value
-                        },
-                        Err(e) => {
-                            if error_tracker.increment_with_error(){
-                                log::error!("RECEIVER | Max Attemps | Error decoding RTP packet: {e}");
-                                shutdown.notify_error(false).await;
-                                return Err(Error::new(ErrorKind::Other, "Error decoding RTP packet"));
-                            }else{
-                                log::warn!("RECEIVER | Error decoding RTP packet: {e}");
-                            }
-                            continue
-                        }
-                    };
-                    for v in value {
-                        let _ = tx.try_send(v);
-                    }
-                    error_tracker.increment();
                 }else if error_tracker.increment_with_error(){
                         log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
                         shutdown.notify_error(false).await;

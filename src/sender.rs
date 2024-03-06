@@ -54,7 +54,7 @@ async fn main() -> Result<(), Error> {
     let audio_device = get_args();
 
     //Create audio frames channels
-    let (tx, rx): (Sender<Vec<f32>>, Receiver<Vec<f32>>) = mpsc::channel();
+    let (tx_audio, rx_audio): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
 
     // Create video frame channels
     let (tx_video, rx_video): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
@@ -62,13 +62,18 @@ async fn main() -> Result<(), Error> {
     let comunication =
         check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
 
-    let mut audio_capture = check_error(AudioCapture::new(audio_device, tx), &shutdown).await?;
+    //let mut audio_capture = check_error(AudioCapture::new(audio_device, tx), &shutdown).await?;
 
     let notify_tx = Arc::new(Notify::new());
     let notify_audio = notify_tx.clone();
     let notify_video = notify_tx.clone();
 
-    let _stream = check_error(audio_capture.start(), &shutdown).await?;
+    // let _stream = check_error(audio_capture.start(), &shutdown).await?;
+
+    thread::spawn(move || {
+        sound::audio_capture::run(tx_audio);
+    });
+    
     thread::spawn(move || {
         run(tx_video);
     });
@@ -98,7 +103,7 @@ async fn main() -> Result<(), Error> {
 
     let shutdown_cpy_2 = shutdown.clone();
     tokio::spawn(async move {
-        start_audio_sending(notify_audio, rx, audio_track, shutdown_cpy_2).await;
+        start_audio_sending(notify_audio, rx_audio, audio_track, shutdown_cpy_2).await;
     });
 
     let shutdown_cpy_4 = shutdown.clone();
@@ -166,7 +171,7 @@ async fn main() -> Result<(), Error> {
         ));
     }
 
-    check_error(audio_capture.stop(), &shutdown).await?;
+    //check_error(audio_capture.stop(), &shutdown).await?;
 
     Ok(())
 }
@@ -289,21 +294,21 @@ async fn read_rtcp(shutdown: shutdown::Shutdown, rtp_sender: Arc<RTCRtpSender>) 
 
 async fn start_audio_sending(
     notify_audio: Arc<Notify>,
-    rx: Receiver<Vec<f32>>,
+    rx: Receiver<Vec<u8>>,
     audio_track: Arc<TrackLocalStaticSample>,
     shutdown: shutdown::Shutdown,
 ) {
     shutdown.add_task().await;
     // Wait for connection established
     notify_audio.notified().await;
-    let mut encoder = match AudioEncoder::new() {
-        Ok(e) => e,
-        Err(err) => {
-            log::error!("SENDER | Error creating audio encoder | {}", err);
-            shutdown.notify_error(false).await;
-            return;
-        }
-    };
+    // let mut encoder = match AudioEncoder::new() {
+    //     Ok(e) => e,
+    //     Err(err) => {
+    //         log::error!("SENDER | Error creating audio encoder | {}", err);
+    //         shutdown.notify_error(false).await;
+    //         return;
+    //     }
+    // };
 
     let mut error_tracker =
         utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
@@ -328,28 +333,29 @@ async fn start_audio_sending(
                 continue;
             }
         };
-        let encoded_data = match encoder.encode(data) {
-            Ok(d) => {
-                error_tracker.increment();
-                d
-            }
-            Err(err) => {
-                if error_tracker.increment_with_error() {
-                    log::error!("SENDER | Max attemps | Error encoding audio | {}", err);
-                    shutdown.notify_error(false).await;
-                    return;
-                } else {
-                    log::warn!("SENDER | Error encoding audio | {}", err);
-                };
-                continue;
-            }
-        };
+        // let encoded_data = match encoder.encode(data) {
+        //     Ok(d) => {
+        //         error_tracker.increment();
+        //         d
+        //     }
+        //     Err(err) => {
+        //         if error_tracker.increment_with_error() {
+        //             log::error!("SENDER | Max attemps | Error encoding audio | {}", err);
+        //             shutdown.notify_error(false).await;
+        //             return;
+        //         } else {
+        //             log::warn!("SENDER | Error encoding audio | {}", err);
+        //         };
+        //         continue;
+        //     }
+        // };
         let sample_duration =
             Duration::from_millis((AUDIO_CHANNELS as u64 * 10000000) / AUDIO_SAMPLE_RATE as u64); //TODO: no hardcodear
 
+        //println!("Data: {:?}", data);
         if let Err(err) = audio_track
             .write_sample(&Sample {
-                data: encoded_data.into(),
+                data: data.into(),
                 duration: sample_duration,
                 ..Default::default()
             })

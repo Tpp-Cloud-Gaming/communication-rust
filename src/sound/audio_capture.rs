@@ -1,10 +1,14 @@
 use std::sync::mpsc::Sender;
 
+use std::{io, thread::sleep, time::Duration};
+
 use gstreamer::{element_error, prelude::*};
 
 pub fn run(tx_audio: Sender<Vec<u8>>) {
     // Initialize GStreamer
     gstreamer::init().unwrap();
+
+    sleep(Duration::from_secs(30));
 
     // Create the elements
     let wasapi2src = gstreamer::ElementFactory::make("wasapi2src")

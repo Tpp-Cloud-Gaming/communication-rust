@@ -92,9 +92,9 @@ pub fn run(tx_video: Sender<Vec<u8>>) {
         .build()
         .expect("Could not create d3d11convert element.");
 
-    let mfh264enc = gstreamer::ElementFactory::make("amfh264enc")
-        .name("amfh264enc")
-        .property_from_str("usage", "ultra-low-latency")
+    let mfh264enc = gstreamer::ElementFactory::make("mfh264enc")
+        .name("mfh264enc")
+        //.property_from_str("usage", "ultra-low-latency")
         .property("bitrate", <gstreamer::glib::Value as From<u32>>::from(6000))
         .build()
         .expect("Could not create mfh264enc element.");

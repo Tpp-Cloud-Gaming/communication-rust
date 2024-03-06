@@ -6,7 +6,6 @@ use webrtc::data_channel::RTCDataChannel;
 use winapi::um::winuser::*;
 use winput::Button;
 
-
 pub struct ButtonController {}
 
 impl ButtonController {
@@ -53,8 +52,6 @@ fn get_mouse_button(key: u8) -> Button {
         _ => Button::Left, //TODO: fix this
     }
 }
-
-
 
 pub fn send_input_key(virtual_key: i32, up: bool) {
     unsafe {

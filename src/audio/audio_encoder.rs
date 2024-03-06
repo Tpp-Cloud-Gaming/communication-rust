@@ -13,9 +13,12 @@ pub struct AudioEncoder {
 impl AudioEncoder {
     /// Returns new instance of audio encoder.
     pub fn new() -> Result<Self, Error> {
-        let encoder =
-            opus::Encoder::new(AUDIO_SAMPLE_RATE, opus::Channels::Stereo, opus::Application::Voip)
-                .map_err(|e| Error::new(std::io::ErrorKind::Other, e))?;
+        let encoder = opus::Encoder::new(
+            AUDIO_SAMPLE_RATE,
+            opus::Channels::Stereo,
+            opus::Application::Voip,
+        )
+        .map_err(|e| Error::new(std::io::ErrorKind::Other, e))?;
 
         Ok(Self { encoder })
     }

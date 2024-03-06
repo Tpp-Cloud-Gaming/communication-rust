@@ -1,7 +1,7 @@
 use opus::Decoder;
 use std::io::Error;
 
-use crate::utils::webrtc_const::{ENCODE_BUFFER_SIZE, AUDIO_SAMPLE_RATE};
+use crate::utils::webrtc_const::{AUDIO_SAMPLE_RATE, ENCODE_BUFFER_SIZE};
 /// Decodes opus samples.
 pub struct AudioDecoder {
     /// Used to decode opus samples

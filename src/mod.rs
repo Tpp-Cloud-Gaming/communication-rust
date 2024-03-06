@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod sound;
 pub mod video;
 pub mod webrtcommunication;
 pub mod input;

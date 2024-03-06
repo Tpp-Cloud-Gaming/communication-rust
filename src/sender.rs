@@ -1,9 +1,10 @@
 pub mod audio;
 pub mod input;
 pub mod output;
+pub mod sound;
 pub mod utils;
-pub mod webrtcommunication;
 pub mod video;
+pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -38,7 +39,8 @@ use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSampl
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 
 use crate::utils::webrtc_const::{
-    AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_TRACK_ID, SEND_TRACK_LIMIT, SEND_TRACK_THRESHOLD, STREAM_TRACK_ID, STUN_ADRESS, VIDEO_TRACK_ID
+    AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_TRACK_ID, SEND_TRACK_LIMIT, SEND_TRACK_THRESHOLD,
+    STREAM_TRACK_ID, STUN_ADRESS, VIDEO_TRACK_ID,
 };
 use crate::webrtcommunication::latency::Latency;
 
@@ -67,46 +69,45 @@ async fn main() -> Result<(), Error> {
     let notify_video = notify_tx.clone();
 
     let _stream = check_error(audio_capture.start(), &shutdown).await?;
-    thread::spawn( move || {
+    thread::spawn(move || {
         run(tx_video);
     });
-    
-    
+
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
 
     let pc = comunication.get_peer();
-    let (rtp_sender, audio_track) = create_track(pc.clone(), shutdown.clone(),MIME_TYPE_OPUS,AUDIO_TRACK_ID).await?;
-    let (rtp_video_sender,video_track) = create_track_2(pc.clone(), shutdown.clone(),MIME_TYPE_H264,VIDEO_TRACK_ID).await?;
+    let (rtp_sender, audio_track) =
+        create_track(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
+    let (rtp_video_sender, video_track) =
+        create_track_2(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
 
     // Start the latency measurement
     check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
 
-
-    channel_handler(&pc, shutdown.clone());    
-    
+    channel_handler(&pc, shutdown.clone());
 
     let shutdown_cpy_1 = shutdown.clone();
     tokio::spawn(async move {
         read_rtcp(shutdown_cpy_1.clone(), rtp_sender).await;
     });
-    
+
     let shutdown_cpy_3 = shutdown.clone();
     tokio::spawn(async move {
         read_rtcp(shutdown_cpy_3.clone(), rtp_video_sender).await;
     });
-    
+
     let shutdown_cpy_2 = shutdown.clone();
     tokio::spawn(async move {
         start_audio_sending(notify_audio, rx, audio_track, shutdown_cpy_2).await;
     });
-    
+
     let shutdown_cpy_4 = shutdown.clone();
     tokio::spawn(async move {
         start_video_sending(notify_video, rx_video, video_track, shutdown_cpy_4).await;
     });
-    
+
     set_peer_events(&pc, notify_tx, done_tx);
-    
+
     // Create an answer to send to the other process
     let offer = match pc.create_offer(None).await {
         Ok(offer) => offer,
@@ -117,7 +118,7 @@ async fn main() -> Result<(), Error> {
     };
     // Create channel that is blocked until ICE Gathering is complete
     let mut gather_complete = pc.gathering_complete_promise().await;
-    
+
     // Sets the LocalDescription, and starts our UDP listeners
     if let Err(_e) = pc.set_local_description(offer).await {
         shutdown.notify_error(true).await;
@@ -174,7 +175,7 @@ async fn create_track(
     pc: Arc<RTCPeerConnection>,
     shutdown: shutdown::Shutdown,
     mime_type: &str,
-    track_id: &str
+    track_id: &str,
 ) -> Result<(Arc<RTCRtpSender>, Arc<TrackLocalStaticSample>), Error> {
     let track = Arc::new(TrackLocalStaticSample::new(
         RTCRtpCodecCapability {
@@ -203,7 +204,7 @@ async fn create_track_2(
     pc: Arc<RTCPeerConnection>,
     shutdown: shutdown::Shutdown,
     mime_type: &str,
-    track_id: &str
+    track_id: &str,
 ) -> Result<(Arc<RTCRtpSender>, Arc<TrackLocalStaticRTP>), Error> {
     let track = Arc::new(TrackLocalStaticRTP::new(
         RTCRtpCodecCapability {
@@ -372,7 +373,6 @@ async fn start_audio_sending(
     }
 }
 
-
 async fn start_video_sending(
     notify_video: Arc<Notify>,
     rx: Receiver<Vec<u8>>,
@@ -383,7 +383,6 @@ async fn start_video_sending(
     // Wait for connection established
     // TODO: Esto puede generar delay me parece
     notify_video.notified().await;
-    
 
     let mut error_tracker =
         utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
@@ -408,15 +407,12 @@ async fn start_video_sending(
                 continue;
             }
         };
-        
+
         //let sample_duration =
         //    Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
         //println!("Mando {:?}",data);
         //println!("Largo {:?}",data.len());
-        if let Err(err) = video_track
-            .write(&data)
-            .await
-        {
+        if let Err(err) = video_track.write(&data).await {
             log::warn!("SENDER | Error writing sample | {}", err);
             if error_tracker.increment_with_error() {
                 log::error!("SENDER | Max attemps | Error writing sample | {}", err);

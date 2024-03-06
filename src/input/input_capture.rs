@@ -86,10 +86,9 @@ async fn start_handler(
     let shutdown_cpy = shutdown.clone();
     loop {
         let shutdown_cpy_loop = shutdown_cpy.clone();
-        
+
         tokio::task::spawn(async move {});
 
-        
         match receiver.next_event() {
             message_loop::Event::Keyboard {
                 vk,
@@ -97,15 +96,16 @@ async fn start_handler(
                 ..
             } => {
                 let button_channel_cpy = button_channel.clone();
-           //     tokio::task::spawn(async move {
-                    handle_button_action(
-                        button_channel_cpy,
-                        PRESS_KEYBOARD_ACTION,
-                        vk.into_u8().to_string(),
-                        shutdown_cpy_loop.clone(),
-                    )
-                    .await.unwrap();
-         //       });
+                //     tokio::task::spawn(async move {
+                handle_button_action(
+                    button_channel_cpy,
+                    PRESS_KEYBOARD_ACTION,
+                    vk.into_u8().to_string(),
+                    shutdown_cpy_loop.clone(),
+                )
+                .await
+                .unwrap();
+                //       });
             }
             message_loop::Event::Keyboard {
                 vk,
@@ -113,44 +113,47 @@ async fn start_handler(
                 ..
             } => {
                 let button_channel_cpy = button_channel.clone();
-             //   tokio::task::spawn(async move {
-                    handle_button_action(
-                        button_channel_cpy,
-                        RELEASE_KEYBOARD_ACTION,
-                        vk.into_u8().to_string(),
-                        shutdown_cpy_loop.clone(),
-                    )
-                    .await.unwrap();
-            //    });
+                //   tokio::task::spawn(async move {
+                handle_button_action(
+                    button_channel_cpy,
+                    RELEASE_KEYBOARD_ACTION,
+                    vk.into_u8().to_string(),
+                    shutdown_cpy_loop.clone(),
+                )
+                .await
+                .unwrap();
+                //    });
             }
             message_loop::Event::MouseButton {
                 action: Action::Press,
                 button,
             } => {
                 let button_channel_cpy = button_channel.clone();
-              //  tokio::task::spawn(async move {
-                    handle_button_action(
-                        button_channel_cpy,
-                        PRESS_MOUSE_ACTION,
-                        button_to_i32(button).to_string(),
-                        shutdown_cpy_loop.clone(),
-                    )
-                    .await.unwrap();
-              //  });
+                //  tokio::task::spawn(async move {
+                handle_button_action(
+                    button_channel_cpy,
+                    PRESS_MOUSE_ACTION,
+                    button_to_i32(button).to_string(),
+                    shutdown_cpy_loop.clone(),
+                )
+                .await
+                .unwrap();
+                //  });
             }
             message_loop::Event::MouseButton {
                 action: Action::Release,
                 button,
             } => {
                 let button_channel_cpy = button_channel.clone();
-              //  tokio::task::spawn(async move {
-                    handle_button_action(
-                        button_channel_cpy,
-                        RELEASE_MOUSE_ACTION,
-                        button_to_i32(button).to_string(),
-                        shutdown_cpy_loop.clone(),
-                    )
-                    .await.unwrap();
+                //  tokio::task::spawn(async move {
+                handle_button_action(
+                    button_channel_cpy,
+                    RELEASE_MOUSE_ACTION,
+                    button_to_i32(button).to_string(),
+                    shutdown_cpy_loop.clone(),
+                )
+                .await
+                .unwrap();
                 //});
             }
             message_loop::Event::MouseMoveRelative { x, y } => {
@@ -171,7 +174,7 @@ async fn start_handler(
             }
             _ => (),
         }
-        
+
         if shutdown.check_for_error().await {
             break;
         };
@@ -187,11 +190,9 @@ async fn handle_button_action(
     if button_channel.ready_state()
         == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
     {
-        
         if let Err(_e) = button_channel
             .send_text(std::format!("{}{}", action, text).as_str())
             .await
-            
         {
             shutdown.notify_error(false).await;
             return Err(Error::new(

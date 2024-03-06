@@ -69,9 +69,6 @@ async fn main() -> Result<(), Error> {
         return Err(Error::new(ErrorKind::Other, "Error playing audio player"));
     };
 
-    
-
-
     let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
     let peer_connection = comunication.get_peer();
@@ -91,7 +88,7 @@ async fn main() -> Result<(), Error> {
 
     // Create video frame channels
     let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
-    thread::spawn( move || {
+    thread::spawn(move || {
         run(rx_video);
     });
 
@@ -205,7 +202,7 @@ fn set_on_track_handler(
             return Box::pin(async move {
                 println!("RECEIVER | Got H264 Track");
                 tokio::spawn(async move {
-                    let _ = read_video_track(track,  shutdown_cpy, &tx_video_cpy).await;
+                    let _ = read_video_track(track, shutdown_cpy, &tx_video_cpy).await;
                 });
             });
         };
@@ -303,7 +300,6 @@ async fn read_audio_track(
     }
 }
 
-
 async fn read_video_track(
     track: Arc<TrackRemote>,
     shutdown: shutdown::Shutdown,
@@ -312,12 +308,10 @@ async fn read_video_track(
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
     shutdown.add_task().await;
 
-    
-    
     loop {
-        let mut buff: [u8; 1400] = [0;1400];
+        let mut buff: [u8; 1400] = [0; 1400];
         tokio::select! {
-            
+
             result = track.read(&mut buff) => {
                 if let Ok((_rtp_packet, _)) = result {
                     //println!("RTP_PACKET: {:?}", rtp_packet.header);
@@ -326,7 +320,7 @@ async fn read_video_track(
                     //let value = rtp_packet.payload.to_vec();
                     //println!("LEN_DATA: {:?}", value.len());
                     //println!("llega: {:?}", buff);
-                    //println!("largo: {:?}",buff.len());    
+                    //println!("largo: {:?}",buff.len());
                     tx.send(buff.to_vec()).unwrap();
 
                 }else if error_tracker.increment_with_error(){

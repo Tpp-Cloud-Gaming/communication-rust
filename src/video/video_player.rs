@@ -5,14 +5,13 @@ use gstreamer::prelude::*;
 pub fn run(rx_video: Receiver<Vec<u8>>) {
     // Initialize GStreamer
     gstreamer::init().unwrap();
-    
+
     // Create the caps
     let caps = gstreamer::Caps::builder("application/x-rtp")
         .field("media", "video")
         .field("clock-rate", 90000)
         .field("encoding-name", "H264")
         .build();
-    
 
     let source = gstreamer_app::AppSrc::builder()
         .caps(&caps)
@@ -36,24 +35,37 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
         .build()
         .expect("Could not create d3d11h264dec element.");
 
-
     let d3d11videosink = gstreamer::ElementFactory::make("d3d11videosink")
         .name("d3d11videosink")
         .build()
         .expect("Could not create d3d11videosink element.");
 
-    
     // Create the empty pipeline
     let pipeline = gstreamer::Pipeline::with_name("pipeline");
 
-    pipeline.add_many([source.upcast_ref(), &rtph264depay,&h264parse,  &d3d11h264dec, &d3d11videosink]).unwrap();
-    gstreamer::Element::link_many([source.upcast_ref(), &rtph264depay,&h264parse, &d3d11h264dec, &d3d11videosink]).unwrap();
-
-     // Start playing
     pipeline
-    .set_state(gstreamer::State::Playing)
-    .expect("Unable to set the pipeline to the `Playing` state");
-    
+        .add_many([
+            source.upcast_ref(),
+            &rtph264depay,
+            &h264parse,
+            &d3d11h264dec,
+            &d3d11videosink,
+        ])
+        .unwrap();
+    gstreamer::Element::link_many([
+        source.upcast_ref(),
+        &rtph264depay,
+        &h264parse,
+        &d3d11h264dec,
+        &d3d11videosink,
+    ])
+    .unwrap();
+
+    // Start playing
+    pipeline
+        .set_state(gstreamer::State::Playing)
+        .expect("Unable to set the pipeline to the `Playing` state");
+
     source.set_callbacks(
         // Since our appsrc element operates in pull mode (it asks us to provide data),
         // we add a handler for the need-data callback and provide new data from there.
@@ -63,9 +75,8 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
         // this handler will be called (on average) twice per second.
         gstreamer_app::AppSrcCallbacks::builder()
             .need_data(move |appsrc, _| {
-                
                 // appsrc already handles the error here
-                
+
                 let frame = rx_video.recv().unwrap();
 
                 //println!("{:?}", appsrc.current_level_bytes());
@@ -73,12 +84,9 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
                 let buffer = gstreamer::Buffer::from_slice(frame);
 
                 appsrc.push_buffer(buffer).unwrap();
-
             })
             .build(),
     );
-
-
 
     // Wait until error or EOS
     let bus = pipeline.bus().unwrap();
@@ -109,8 +117,6 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
         }
     }
 
-    
-    
     pipeline
         .set_state(gstreamer::State::Null)
         .expect("Unable to set the pipeline to the `Null` state");

@@ -93,14 +93,23 @@ async fn start_handler(
             message_loop::Event::Keyboard {
                 vk,
                 action: Action::Press,
-                ..
+                scan_code,
             } => {
                 let button_channel_cpy = button_channel.clone();
+                println!("Presiono tecla: {:?}", vk);
                 //     tokio::task::spawn(async move {
+                let mut key = "".to_string();
+                if scan_code == 42 {
+                    key = "160".to_string();
+                } else if scan_code == 54 {
+                    key = "161".to_string();
+                } else {
+                    key = vk.into_u8().to_string();
+                }
                 handle_button_action(
                     button_channel_cpy,
                     PRESS_KEYBOARD_ACTION,
-                    vk.into_u8().to_string(),
+                    key,
                     shutdown_cpy_loop.clone(),
                 )
                 .await
@@ -110,14 +119,22 @@ async fn start_handler(
             message_loop::Event::Keyboard {
                 vk,
                 action: Action::Release,
-                ..
+                scan_code,
             } => {
                 let button_channel_cpy = button_channel.clone();
+                let mut key = "".to_string();
+                if scan_code == 42 {
+                    key = "160".to_string();
+                } else if scan_code == 54 {
+                    key = "161".to_string();
+                } else {
+                    key = vk.into_u8().to_string();
+                }
                 //   tokio::task::spawn(async move {
                 handle_button_action(
                     button_channel_cpy,
                     RELEASE_KEYBOARD_ACTION,
-                    vk.into_u8().to_string(),
+                    key,
                     shutdown_cpy_loop.clone(),
                 )
                 .await

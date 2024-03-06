@@ -45,7 +45,7 @@ unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL
 pub fn run(tx_video: Sender<Vec<u8>>) {
     // Initialize GStreamer
     gstreamer::init().unwrap();
-    // sleep(Duration::from_secs(30));
+    sleep(Duration::from_secs(60));
     // let mut hwnds: Vec<(HWND, String, String)> = Vec::new();
     // unsafe { EnumWindows(Some(enumerate_callback), &mut hwnds as *mut _ as LPARAM)};
 
@@ -92,11 +92,17 @@ pub fn run(tx_video: Sender<Vec<u8>>) {
         .build()
         .expect("Could not create d3d11convert element.");
 
-    let mfh264enc = gstreamer::ElementFactory::make("mfh264enc")
-        .name("mfh264enc")
-        .property("low-latency", true)
+    let mfh264enc = gstreamer::ElementFactory::make("amfh264enc")
+        .name("amfh264enc")
+        .property_from_str("usage", "ultra-low-latency")
+        .property("bitrate", <gstreamer::glib::Value as From<u32>>::from(6000))
         .build()
         .expect("Could not create mfh264enc element.");
+    // let mfh264enc = gstreamer::ElementFactory::make("mfh264enc")
+    //     .name("mfh264enc")
+    //     .property("low-latency", true)
+    //     .build()
+    //     .expect("Could not create mfh264enc element.");
 
     let rtph264pay = gstreamer::ElementFactory::make("rtph264pay")
         .name("rtph264pay")

@@ -19,6 +19,7 @@ impl ButtonController {
                 let s = String::from_utf8_lossy(&msg.data);
                 let (action, rest) = s.split_at(1);
                 let key = rest.parse::<u8>().unwrap();
+                println!("Recibo tecla: {:?}", key);
                 //let (action, key) = get_action_and_key(&msg.data);
                 match action {
                     PRESS_KEYBOARD_ACTION => {
@@ -63,7 +64,7 @@ pub fn send_input_key(virtual_key: i32, up: bool) {
             wVk: virtual_key as u16,
             dwFlags: if up { KEYEVENTF_KEYUP } else { 0 },
             dwExtraInfo: 1,
-            wScan: KEYEVENTF_EXTENDEDKEY as u16,
+            wScan: KEYEVENTF_SCANCODE as u16,
             time: 0,
         };
 

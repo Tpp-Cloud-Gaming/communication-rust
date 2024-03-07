@@ -1,10 +1,11 @@
 pub mod audio;
 pub mod input;
 pub mod output;
-pub mod sound;
+//pub mod sound;
 pub mod utils;
 pub mod video;
 pub mod webrtcommunication;
+use crate::audio::audio_encoder::AudioEncoder;
 use std::io::{Error, ErrorKind};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -12,12 +13,9 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use crate::audio::audio_capture::AudioCapture;
-use crate::audio::audio_encoder::AudioEncoder;
-
 use crate::utils::common_utils::get_args;
 use crate::utils::shutdown::Shutdown;
-use crate::video::video_capture::run;
+use crate::video::video_capture::start_video_capture;
 use crate::webrtcommunication::communication::{encode, Communication};
 
 use input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
@@ -74,15 +72,19 @@ async fn main() -> Result<(), Error> {
         sound::audio_capture::run(tx_audio);
     });
     
-    thread::spawn(move || {
-        run(tx_video);
-    });
+    //let _stream = check_error(audio_capture.start(), &shutdown).await?;
+
+    // Start the video capture
+    let shutdown_video = shutdown.clone();
+    tokio::spawn(async move {
+        start_video_capture(tx_video, shutdown_video).await;
+    )};
 
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
 
     let pc = comunication.get_peer();
-    let (rtp_sender, audio_track) =
-        create_track(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
+    // let (rtp_sender, audio_track) =
+    //     create_track(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
     let (rtp_video_sender, video_track) =
         create_track_2(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
 
@@ -91,20 +93,26 @@ async fn main() -> Result<(), Error> {
 
     channel_handler(&pc, shutdown.clone());
 
-    let shutdown_cpy_1 = shutdown.clone();
-    tokio::spawn(async move {
-        read_rtcp(shutdown_cpy_1.clone(), rtp_sender).await;
-    });
+    // let shutdown_cpy_1 = shutdown.clone();
+    // tokio::spawn(async move {
+    //     read_rtcp(shutdown_cpy_1.clone(), rtp_sender).await;
+    // });
 
     let shutdown_cpy_3 = shutdown.clone();
     tokio::spawn(async move {
         read_rtcp(shutdown_cpy_3.clone(), rtp_video_sender).await;
     });
 
+
     let shutdown_cpy_2 = shutdown.clone();
     tokio::spawn(async move {
         start_audio_sending(notify_audio, rx_audio, audio_track, shutdown_cpy_2).await;
     });
+
+    // let shutdown_cpy_2 = shutdown.clone();
+    // tokio::spawn(async move {
+    //     start_audio_sending(notify_audio, rx, audio_track, shutdown_cpy_2).await;
+    // });
 
     let shutdown_cpy_4 = shutdown.clone();
     tokio::spawn(async move {

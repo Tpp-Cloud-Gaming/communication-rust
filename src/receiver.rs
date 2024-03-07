@@ -10,7 +10,7 @@ use std::sync::{mpsc, Arc};
 use std::thread;
 
 use crate::input::input_capture::InputCapture;
-use crate::video::video_player::run;
+use crate::video::video_player::start_video_player;
 
 use utils::error_tracker::ErrorTracker;
 use utils::shutdown;
@@ -89,8 +89,9 @@ async fn main() -> Result<(), Error> {
 
     // Create video frame channels
     let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
-    thread::spawn(move || {
-        run(rx_video);
+    let shutdown_player = shutdown.clone();
+    tokio::spawn(async move {
+        start_video_player(rx_video, shutdown_player).await;
     });
 
     let (tx_audio, rx_audio): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();

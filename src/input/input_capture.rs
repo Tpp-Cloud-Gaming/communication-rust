@@ -96,7 +96,6 @@ async fn start_handler(
                 scan_code,
             } => {
                 let button_channel_cpy = button_channel.clone();
-                println!("Presiono tecla: {:?}", vk);
                 //     tokio::task::spawn(async move {
                 let mut key = "".to_string();
                 if scan_code == 42 {

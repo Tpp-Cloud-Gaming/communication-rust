@@ -1,10 +1,21 @@
-use std::sync::mpsc::Receiver;
+use std::{collections::HashMap, io::Error, sync::mpsc::Receiver};
 
-use gstreamer::prelude::*;
+use gstreamer::{prelude::*, Caps, Element, Pipeline};
 
-pub fn run(rx_video: Receiver<Vec<u8>>) {
+use crate::utils::shutdown;
+
+pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown: shutdown::Shutdown) {
+    shutdown.add_task().await;
+
     // Initialize GStreamer
-    gstreamer::init().unwrap();
+    if let Err(e) = gstreamer::init() {
+        shutdown.notify_error(false).await;
+        log::error!(
+            "VIDEO PLAYER | Failed to initialize gstreamer: {}",
+            e.message()
+        );
+        return;
+    };
 
     // Create the caps
     let caps = gstreamer::Caps::builder("application/x-rtp")
@@ -13,12 +24,44 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
         .field("encoding-name", "H264")
         .build();
 
-    let source = gstreamer_app::AppSrc::builder()
-        .caps(&caps)
-        .format(gstreamer::Format::Time)
-        .is_live(true)
-        .do_timestamp(true)
-        .build();
+    let elements = match create_elements() {
+        Ok(e) => e,
+        Err(e) => {
+            shutdown.notify_error(false).await;
+            log::error!("VIDEO PLAYER | Failed to create elements: {}", e);
+            return;
+        }
+    };
+
+    let pipeline = match create_pipeline(elements, caps, rx_video) {
+        Ok(p) => p,
+        Err(e) => {
+            shutdown.notify_error(false).await;
+            log::error!("VIDEO PLAYER | Failed to create pipeline: {}", e);
+            return;
+        }
+    };
+
+    let pipeline_cpy = pipeline.clone();
+    let shutdown_cpy = shutdown.clone();
+    tokio::select! {
+        _ = tokio::task::spawn(async move {
+            read_bus(pipeline_cpy, shutdown_cpy).await;
+        }) => {
+            log::info!("VIDEO PLAYER | Pipeline finished");
+        },
+        _ = shutdown.wait_for_shutdown() => {
+            log::info!("VIDEO PLAYER | Shutdown received");
+        },
+    }
+
+    if let Err(e) = pipeline.set_state(gstreamer::State::Null) {
+        log::error!("VIDEO PLAYER | Failed to set pipeline to null: {}", e);
+    }
+}
+
+fn create_elements() -> Result<HashMap<&'static str, Element>, Error> {
+    let mut elements = HashMap::new();
 
     let rtph264depay = gstreamer::ElementFactory::make("rtph264depay")
         .name("rtph264depay")
@@ -40,47 +83,59 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
         .build()
         .expect("Could not create d3d11videosink element.");
 
+    elements.insert("depay", rtph264depay);
+    elements.insert("parse", h264parse);
+    elements.insert("dec", d3d11h264dec);
+    elements.insert("sink", d3d11videosink);
+
+    return Ok(elements);
+}
+
+fn create_pipeline(
+    elements: HashMap<&str, Element>,
+    caps: Caps,
+    rx_video: Receiver<Vec<u8>>,
+) -> Result<gstreamer::Pipeline, Error> {
+    let source = gstreamer_app::AppSrc::builder()
+        .caps(&caps)
+        .format(gstreamer::Format::Time)
+        .is_live(true)
+        .do_timestamp(true)
+        .build();
+
     // Create the empty pipeline
     let pipeline = gstreamer::Pipeline::with_name("pipeline");
 
-    pipeline
-        .add_many([
-            source.upcast_ref(),
-            &rtph264depay,
-            &h264parse,
-            &d3d11h264dec,
-            &d3d11videosink,
-        ])
-        .unwrap();
-    gstreamer::Element::link_many([
+    if let Err(e) = pipeline.add_many([
         source.upcast_ref(),
-        &rtph264depay,
-        &h264parse,
-        &d3d11h264dec,
-        &d3d11videosink,
-    ])
-    .unwrap();
+        &elements["depay"],
+        &elements["parse"],
+        &elements["dec"],
+        &elements["sink"],
+    ]) {
+        return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
+    }
+
+    if let Err(e) = gstreamer::Element::link_many([
+        source.upcast_ref(),
+        &elements["depay"],
+        &elements["parse"],
+        &elements["dec"],
+        &elements["sink"],
+    ]) {
+        return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
+    }
 
     // Start playing
-    pipeline
-        .set_state(gstreamer::State::Playing)
-        .expect("Unable to set the pipeline to the `Playing` state");
+    if let Err(e) = pipeline.set_state(gstreamer::State::Playing) {
+        return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
+    }
 
     source.set_callbacks(
-        // Since our appsrc element operates in pull mode (it asks us to provide data),
-        // we add a handler for the need-data callback and provide new data from there.
-        // In our case, we told gstreamer that we do 2 frames per second. While the
-        // buffers of all elements of the pipeline are still empty, this will be called
-        // a couple of times until all of them are filled. After this initial period,
-        // this handler will be called (on average) twice per second.
         gstreamer_app::AppSrcCallbacks::builder()
             .need_data(move |appsrc, _| {
-                // appsrc already handles the error here
-
                 let frame = rx_video.recv().unwrap();
 
-                //println!("{:?}", appsrc.current_level_bytes());
-                // println!("APPSRC: {:?}", frame );
                 let buffer = gstreamer::Buffer::from_slice(frame);
 
                 appsrc.push_buffer(buffer).unwrap();
@@ -88,36 +143,46 @@ pub fn run(rx_video: Receiver<Vec<u8>>) {
             .build(),
     );
 
+    return Ok(pipeline);
+}
+
+async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
     // Wait until error or EOS
-    let bus = pipeline.bus().unwrap();
+    let bus = match pipeline.bus() {
+        Some(b) => b,
+        None => {
+            log::error!("VIDEO PLAYER | Pipeline has no bus");
+            shutdown.notify_error(false).await;
+            return;
+        }
+    };
     for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
         use gstreamer::MessageView;
 
         match msg.view() {
             MessageView::Error(err) => {
-                eprintln!(
-                    "Error received from element {:?} {}",
+                log::error!(
+                    "VIDEO PLAYER | Error received from element {:?} {}",
                     err.src().map(|s| s.path_string()),
                     err.error()
                 );
-                eprintln!("Debugging information: {:?}", err.debug());
+                shutdown.notify_error(false).await;
                 break;
             }
             MessageView::StateChanged(state_changed) => {
                 if state_changed.src().map(|s| s == &pipeline).unwrap_or(false) {
-                    println!(
-                        "Pipeline state changed from {:?} to {:?}",
+                    log::debug!(
+                        "VIDEO PLAYER | Pipeline state changed from {:?} to {:?}",
                         state_changed.old(),
                         state_changed.current()
                     );
                 }
             }
-            MessageView::Eos(..) => break,
+            MessageView::Eos(..) => {
+                shutdown.notify_error(false).await;
+                break;
+            }
             _ => (),
         }
     }
-
-    pipeline
-        .set_state(gstreamer::State::Null)
-        .expect("Unable to set the pipeline to the `Null` state");
 }

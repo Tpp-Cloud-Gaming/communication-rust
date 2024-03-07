@@ -19,7 +19,7 @@ impl ButtonController {
                 let s = String::from_utf8_lossy(&msg.data);
                 let (action, rest) = s.split_at(1);
                 let key = rest.parse::<u8>().unwrap();
-                //println!("Recibo tecla: {:?}", key);
+
                 //let (action, key) = get_action_and_key(&msg.data);
                 match action {
                     PRESS_KEYBOARD_ACTION => {

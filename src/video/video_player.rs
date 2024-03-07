@@ -33,7 +33,7 @@ pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown: shutdown:
         }
     };
 
-    let pipeline = match create_pipeline(elements, caps) {
+    let pipeline = match create_pipeline(elements, caps, rx_video) {
         Ok(p) => p,
         Err(e) => {
             shutdown.notify_error(false).await;
@@ -94,6 +94,7 @@ fn create_elements() -> Result<HashMap<&'static str, Element>, Error> {
 fn create_pipeline(
     elements: HashMap<&str, Element>,
     caps: Caps,
+    rx_video: Receiver<Vec<u8>>,
 ) -> Result<gstreamer::Pipeline, Error> {
     let source = gstreamer_app::AppSrc::builder()
         .caps(&caps)
@@ -129,6 +130,18 @@ fn create_pipeline(
     if let Err(e) = pipeline.set_state(gstreamer::State::Playing) {
         return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
     }
+
+    source.set_callbacks(
+        gstreamer_app::AppSrcCallbacks::builder()
+            .need_data(move |appsrc, _| {
+                let frame = rx_video.recv().unwrap();
+
+                let buffer = gstreamer::Buffer::from_slice(frame);
+
+                appsrc.push_buffer(buffer).unwrap();
+            })
+            .build(),
+    );
 
     return Ok(pipeline);
 }

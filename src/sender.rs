@@ -1,11 +1,9 @@
-pub mod audio;
 pub mod input;
 pub mod output;
-//pub mod sound;
+pub mod sound;
 pub mod utils;
 pub mod video;
 pub mod webrtcommunication;
-use crate::audio::audio_encoder::AudioEncoder;
 use std::io::{Error, ErrorKind};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -13,7 +11,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use crate::utils::common_utils::get_args;
 use crate::utils::shutdown::Shutdown;
 use crate::video::video_capture::start_video_capture;
 use crate::webrtcommunication::communication::{encode, Communication};
@@ -48,9 +45,6 @@ async fn main() -> Result<(), Error> {
     env_logger::builder().format_target(false).init();
     let shutdown = Shutdown::new();
 
-    //Check for CLI args
-    let audio_device = get_args();
-
     //Create audio frames channels
     let (tx_audio, rx_audio): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
 
@@ -60,31 +54,25 @@ async fn main() -> Result<(), Error> {
     let comunication =
         check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
 
-    //let mut audio_capture = check_error(AudioCapture::new(audio_device, tx), &shutdown).await?;
-
     let notify_tx = Arc::new(Notify::new());
     let notify_audio = notify_tx.clone();
     let notify_video = notify_tx.clone();
 
-    // let _stream = check_error(audio_capture.start(), &shutdown).await?;
-
     thread::spawn(move || {
         sound::audio_capture::run(tx_audio);
     });
-    
-    //let _stream = check_error(audio_capture.start(), &shutdown).await?;
 
     // Start the video capture
     let shutdown_video = shutdown.clone();
     tokio::spawn(async move {
         start_video_capture(tx_video, shutdown_video).await;
-    )};
+    });
 
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
 
     let pc = comunication.get_peer();
-    // let (rtp_sender, audio_track) =
-    //     create_track(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
+    let (rtp_sender, audio_track) =
+        create_track(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
     let (rtp_video_sender, video_track) =
         create_track_2(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
 
@@ -93,26 +81,15 @@ async fn main() -> Result<(), Error> {
 
     channel_handler(&pc, shutdown.clone());
 
-    // let shutdown_cpy_1 = shutdown.clone();
-    // tokio::spawn(async move {
-    //     read_rtcp(shutdown_cpy_1.clone(), rtp_sender).await;
-    // });
-
     let shutdown_cpy_3 = shutdown.clone();
     tokio::spawn(async move {
         read_rtcp(shutdown_cpy_3.clone(), rtp_video_sender).await;
     });
 
-
     let shutdown_cpy_2 = shutdown.clone();
     tokio::spawn(async move {
         start_audio_sending(notify_audio, rx_audio, audio_track, shutdown_cpy_2).await;
     });
-
-    // let shutdown_cpy_2 = shutdown.clone();
-    // tokio::spawn(async move {
-    //     start_audio_sending(notify_audio, rx, audio_track, shutdown_cpy_2).await;
-    // });
 
     let shutdown_cpy_4 = shutdown.clone();
     tokio::spawn(async move {
@@ -178,8 +155,6 @@ async fn main() -> Result<(), Error> {
             "Error closing peer connection",
         ));
     }
-
-    //check_error(audio_capture.stop(), &shutdown).await?;
 
     Ok(())
 }
@@ -309,14 +284,6 @@ async fn start_audio_sending(
     shutdown.add_task().await;
     // Wait for connection established
     notify_audio.notified().await;
-    // let mut encoder = match AudioEncoder::new() {
-    //     Ok(e) => e,
-    //     Err(err) => {
-    //         log::error!("SENDER | Error creating audio encoder | {}", err);
-    //         shutdown.notify_error(false).await;
-    //         return;
-    //     }
-    // };
 
     let mut error_tracker =
         utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
@@ -341,26 +308,10 @@ async fn start_audio_sending(
                 continue;
             }
         };
-        // let encoded_data = match encoder.encode(data) {
-        //     Ok(d) => {
-        //         error_tracker.increment();
-        //         d
-        //     }
-        //     Err(err) => {
-        //         if error_tracker.increment_with_error() {
-        //             log::error!("SENDER | Max attemps | Error encoding audio | {}", err);
-        //             shutdown.notify_error(false).await;
-        //             return;
-        //         } else {
-        //             log::warn!("SENDER | Error encoding audio | {}", err);
-        //         };
-        //         continue;
-        //     }
-        // };
+
         let sample_duration =
             Duration::from_millis((AUDIO_CHANNELS as u64 * 10000000) / AUDIO_SAMPLE_RATE as u64); //TODO: no hardcodear
 
-        //println!("Data: {:?}", data);
         if let Err(err) = audio_track
             .write_sample(&Sample {
                 data: data.into(),
@@ -424,8 +375,6 @@ async fn start_video_sending(
 
         //let sample_duration =
         //    Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
-        //println!("Mando {:?}",data);
-        //println!("Largo {:?}",data.len());
         if let Err(err) = video_track.write(&data).await {
             log::warn!("SENDER | Error writing sample | {}", err);
             if error_tracker.increment_with_error() {
@@ -451,12 +400,10 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, _shutdown: shutdown
         let d_label = d.label().to_owned();
 
         if d_label == MOUSE_CHANNEL_LABEL {
-            //TODO: HANDLEAR MOUSE CHANNEL
             Box::pin(async {
                 MouseController::start_mouse_controller(d);
             })
         } else if d_label == KEYBOARD_CHANNEL_LABEL {
-            //TODO: HANDLEAR KEYBOARD CHANNEL
             Box::pin(async {
                 ButtonController::start_keyboard_controller(d);
             })

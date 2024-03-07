@@ -1,8 +1,7 @@
-pub mod audio;
 pub mod input;
 pub mod output;
-pub mod utils;
 pub mod sound;
+pub mod utils;
 pub mod video;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
@@ -23,16 +22,9 @@ use webrtc::{
     track::track_remote::TrackRemote,
 };
 
-use std::sync::Mutex;
-use tokio::sync::mpsc::{Receiver, Sender};
-
-use cpal::traits::StreamTrait;
-
-use crate::audio::audio_decoder::AudioDecoder;
-use crate::utils::common_utils::get_args;
 use crate::utils::latency_const::LATENCY_CHANNEL_LABEL;
 use crate::utils::shutdown::Shutdown;
-use crate::utils::webrtc_const::{ENCODE_BUFFER_SIZE, STUN_ADRESS};
+use crate::utils::webrtc_const::STUN_ADRESS;
 use crate::webrtcommunication::communication::{encode, Communication};
 use crate::webrtcommunication::latency::Latency;
 
@@ -42,33 +34,6 @@ async fn main() -> Result<(), Error> {
 
     env_logger::builder().format_target(false).init();
     let shutdown = Shutdown::new();
-
-    //Check for CLI args
-    let audio_device = get_args();
-
-    // let (tx_decoder_1, rx_decoder_1): (Sender<i16>, Receiver<i16>) =
-    //     tokio::sync::mpsc::channel(ENCODE_BUFFER_SIZE);
-    // let audio_player = match audio::audio_player::AudioPlayer::new(
-    //     audio_device,
-    //     Arc::new(Mutex::new(rx_decoder_1)),
-    // ) {
-    //     Ok(audio_player) => audio_player,
-    //     Err(e) => {
-    //         log::error!("RECEIVER | Error creating audio player: {e}");
-    //         return Err(Error::new(ErrorKind::Other, "Error creating audio player"));
-    //     }
-    // };
-    // let stream = match audio_player.start() {
-    //     Ok(stream) => stream,
-    //     Err(e) => {
-    //         log::error!("RECEIVER | Error starting audio player: {e}");
-    //         return Err(Error::new(ErrorKind::Other, "Error starting audio player"));
-    //     }
-    // };
-    // if let Err(e) = stream.play() {
-    //     log::error!("RECEIVER | Error playing audio player: {e}");
-    //     return Err(Error::new(ErrorKind::Other, "Error playing audio player"));
-    // };
 
     let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;
 
@@ -253,19 +218,7 @@ async fn read_audio_track(
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
     shutdown.add_task().await;
 
-    // let mut decoder = match AudioDecoder::new() {
-    //     Ok(decoder) => decoder,
-    //     Err(e) => {
-    //         log::error!("RECEIVER | Error creating audio decoder: {e}");
-    //         shutdown.notify_error(false).await;
-    //         return Err(Error::new(ErrorKind::Other, "Error creating audio decoder"));
-    //     }
-    // };
-
-    
-
     loop {
-
         tokio::select! {
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
@@ -306,13 +259,7 @@ async fn read_video_track(
 
             result = track.read(&mut buff) => {
                 if let Ok((_rtp_packet, _)) = result {
-                    //println!("RTP_PACKET: {:?}", rtp_packet.header);
-                    //println!("RTP_PACKET: {:?}", rtp_packet.payload.to_vec());
 
-                    //let value = rtp_packet.payload.to_vec();
-                    //println!("LEN_DATA: {:?}", value.len());
-                    //println!("llega: {:?}", buff);
-                    //println!("largo: {:?}",buff.len());
                     tx.send(buff.to_vec()).unwrap();
 
                 }else if error_tracker.increment_with_error(){

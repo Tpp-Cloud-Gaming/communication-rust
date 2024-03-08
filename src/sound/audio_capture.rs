@@ -2,15 +2,21 @@ use std::collections::HashMap;
 use std::io::Error;
 use std::sync::mpsc::Sender;
 
+use std::sync::Arc;
 use std::{thread::sleep, time::Duration};
 
 use gstreamer::{element_error, glib, prelude::*, Caps, Element, Pipeline};
+use tokio::sync::{Barrier, Mutex};
 
 use crate::utils::shutdown;
 
 use super::audio_const::{GSTREAMER_INITIAL_SLEEP, PIPELINE_NAME};
 
-pub async fn start_audio_capture(tx_audio: Sender<Vec<u8>>, shutdown: shutdown::Shutdown) {
+pub async fn start_audio_capture(
+    tx_audio: Sender<Vec<u8>>,
+    shutdown: shutdown::Shutdown,
+    barrier: Arc<Barrier>,
+) {
     shutdown.add_task().await;
 
     // Initialize GStreamer
@@ -23,7 +29,8 @@ pub async fn start_audio_capture(tx_audio: Sender<Vec<u8>>, shutdown: shutdown::
         return;
     };
 
-    sleep(Duration::from_secs(GSTREAMER_INITIAL_SLEEP));
+    barrier.wait().await;
+    println!("AUDIO CAPTURE | Barrier released");
 
     let caps = gstreamer::Caps::builder("audio/x-raw")
         //.field("rate", 48000)

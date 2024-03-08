@@ -2,10 +2,11 @@ use gstreamer::{element_error, glib, prelude::*, Bus, Element, Pipeline};
 use std::{
     collections::HashMap,
     io::{self, Error},
-    sync::mpsc::Sender,
+    sync::{mpsc::Sender, Arc},
     thread::sleep,
     time::Duration,
 };
+use tokio::sync::{Barrier, Mutex};
 use winapi::{
     shared::{
         minwindef::{BOOL, LPARAM, TRUE},
@@ -52,7 +53,11 @@ unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL
     TRUE
 }
 
-pub async fn start_video_capture(tx_video: Sender<Vec<u8>>, shutdown: shutdown::Shutdown) {
+pub async fn start_video_capture(
+    tx_video: Sender<Vec<u8>>,
+    shutdown: shutdown::Shutdown,
+    barrier: Arc<Barrier>,
+) {
     shutdown.add_task().await;
 
     // Initialize GStreamer
@@ -64,8 +69,8 @@ pub async fn start_video_capture(tx_video: Sender<Vec<u8>>, shutdown: shutdown::
         );
         return;
     };
-    sleep(Duration::from_secs(GSTREAMER_INITIAL_SLEEP));
-
+    barrier.wait().await;
+    println!("VIDEO CAPTURE | Barrier passed");
     // let mut hwnds: Vec<(HWND, String, String)> = Vec::new();
     // unsafe { EnumWindows(Some(enumerate_callback), &mut hwnds as *mut _ as LPARAM)};
 

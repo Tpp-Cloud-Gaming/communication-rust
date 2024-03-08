@@ -8,8 +8,8 @@ use std::io::{Error, ErrorKind};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
+use tokio::sync::Barrier;
 
 use crate::utils::shutdown::Shutdown;
 use crate::video::video_capture::start_video_capture;
@@ -45,6 +45,8 @@ async fn main() -> Result<(), Error> {
     env_logger::builder().format_target(false).init();
     let shutdown = Shutdown::new();
 
+    let barrier = Arc::new(Barrier::new(3));
+
     //Create audio frames channels
     let (tx_audio, rx_audio): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
 
@@ -59,19 +61,24 @@ async fn main() -> Result<(), Error> {
     let notify_video = notify_tx.clone();
 
     let shutdown_audio = shutdown.clone();
+
+    let barrier_audio = barrier.clone();
     tokio::spawn(async move {
-        sound::audio_capture::start_audio_capture(tx_audio, shutdown_audio).await;
+        sound::audio_capture::start_audio_capture(tx_audio, shutdown_audio, barrier_audio).await;
     });
 
     // Start the video capture
     let shutdown_video = shutdown.clone();
+
+    let barrier_video = barrier.clone();
     tokio::spawn(async move {
-        start_video_capture(tx_video, shutdown_video).await;
+        start_video_capture(tx_video, shutdown_video, barrier_video).await;
     });
 
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
 
     let pc = comunication.get_peer();
+
     let (rtp_sender, audio_track) =
         create_track(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
     let (rtp_video_sender, video_track) =
@@ -97,7 +104,7 @@ async fn main() -> Result<(), Error> {
         start_video_sending(notify_video, rx_video, video_track, shutdown_cpy_4).await;
     });
 
-    set_peer_events(&pc, notify_tx, done_tx);
+    set_peer_events(&pc, notify_tx, done_tx, barrier.clone());
 
     // Create an answer to send to the other process
     let offer = match pc.create_offer(None).await {
@@ -222,6 +229,7 @@ fn set_peer_events(
     pc: &Arc<RTCPeerConnection>,
     notify_tx: Arc<Notify>,
     done_tx: tokio::sync::mpsc::Sender<()>,
+    barrier: Arc<Barrier>,
 ) {
     // Set the handler for ICE connection state
     // This will notify you when the peer has connected/disconnected
@@ -229,6 +237,12 @@ fn set_peer_events(
         log::info!("SENDER | ICE Connection State has changed | {connection_state}");
         if connection_state == RTCIceConnectionState::Connected {
             notify_tx.notify_waiters();
+            let barrier_cpy = barrier.clone();
+            Box::pin(async move {
+                println!("SENDER | Barrier espera");
+                barrier_cpy.wait().await;
+                println!("SENDER | Barrier released");
+            });
         }
         Box::pin(async {})
     }));
@@ -282,6 +296,7 @@ async fn start_audio_sending(
     audio_track: Arc<TrackLocalStaticSample>,
     shutdown: shutdown::Shutdown,
 ) {
+    println!("ARRANCO");
     shutdown.add_task().await;
     // Wait for connection established
     notify_audio.notified().await;

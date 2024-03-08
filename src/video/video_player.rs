@@ -1,6 +1,7 @@
 use std::{collections::HashMap, io::Error, sync::mpsc::Receiver};
 
-use gstreamer::{prelude::*, Caps, Element, Pipeline};
+use gstreamer::{glib, prelude::*, Caps, Element, Pipeline};
+use winapi::um::winuser::ShowCursor;
 
 use crate::utils::shutdown;
 
@@ -80,6 +81,9 @@ fn create_elements() -> Result<HashMap<&'static str, Element>, Error> {
 
     let d3d11videosink = gstreamer::ElementFactory::make("d3d11videosink")
         .name("d3d11videosink")
+        .property("emit-present", true)
+        .property("fullscreen", true)
+        .property_from_str("fullscreen-toggle-mode", "property")
         .build()
         .expect("Could not create d3d11videosink element.");
 
@@ -141,6 +145,19 @@ fn create_pipeline(
                 appsrc.push_buffer(buffer).unwrap();
             })
             .build(),
+    );
+
+    let videosink = &elements["sink"];
+    videosink.connect_closure(
+        "present",
+        false,
+        glib::closure!(move |_sink: &gstreamer::Element,
+                             _device: &gstreamer::Object,
+                             _rtv_raw: glib::Pointer| {
+            unsafe {
+                ShowCursor(0);
+            }
+        }),
     );
 
     return Ok(pipeline);

@@ -58,8 +58,9 @@ async fn main() -> Result<(), Error> {
     let notify_audio = notify_tx.clone();
     let notify_video = notify_tx.clone();
 
-    thread::spawn(move || {
-        sound::audio_capture::run(tx_audio);
+    let shutdown_audio = shutdown.clone();
+    tokio::spawn(async move {
+        sound::audio_capture::start_audio_capture(tx_audio, shutdown_audio).await;
     });
 
     // Start the video capture

@@ -60,8 +60,9 @@ async fn main() -> Result<(), Error> {
     });
 
     let (tx_audio, rx_audio): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
-    thread::spawn(move || {
-        sound::audio_player::run(rx_audio);
+    let shutdown_audio = shutdown.clone();
+    tokio::spawn(async move {
+        sound::audio_player::start_audio_player(rx_audio, shutdown_audio).await;
     });
 
     // Set a handler for when a new remote track starts, this handler saves buffers to disk as

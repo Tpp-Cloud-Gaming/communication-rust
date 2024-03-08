@@ -1,86 +1,151 @@
+use std::collections::HashMap;
+use std::io::Error;
 use std::sync::mpsc::Sender;
 
-use std::{io, thread::sleep, time::Duration};
+use std::{thread::sleep, time::Duration};
 
-use gstreamer::{element_error, prelude::*};
+use gstreamer::{element_error, glib, prelude::*, Caps, Element, Pipeline};
 
-pub fn run(tx_audio: Sender<Vec<u8>>) {
+use crate::utils::shutdown;
+
+use super::audio_const::{CAPS_CHANNELS_AMOUNT, GSTREAMER_INITIAL_SLEEP, PIPELINE_NAME};
+
+pub async fn start_audio_capture(tx_audio: Sender<Vec<u8>>, shutdown: shutdown::Shutdown) {
+    shutdown.add_task().await;
+
     // Initialize GStreamer
-    gstreamer::init().unwrap();
+    if let Err(e) = gstreamer::init() {
+        log::error!(
+            "AUDIO CAPTURE | Error initializing GStreamer: {}",
+            e.to_string()
+        );
+        shutdown.notify_error(false).await;
+        return;
+    };
 
-    sleep(Duration::from_secs(60));
+    sleep(Duration::from_secs(GSTREAMER_INITIAL_SLEEP));
 
     let caps = gstreamer::Caps::builder("audio/x-raw")
         //.field("rate", 48000)
-        .field("channels", 2)
+        .field("channels", CAPS_CHANNELS_AMOUNT)
         .build();
+
+    let elements = match create_elements() {
+        Ok(e) => e,
+        Err(e) => {
+            log::error!("AUDIO CAPTURE | Error creating elements: {}", e.message);
+            shutdown.notify_error(false).await;
+            return;
+        }
+    };
+
+    let pipeline = match create_pipeline(tx_audio, elements, caps) {
+        Ok(p) => p,
+        Err(e) => {
+            log::error!("AUDIO CAPTURE | Error creating pipeline: {}", e.to_string());
+            shutdown.notify_error(false).await;
+            return;
+        }
+    };
+
+    let pipeline_cpy = pipeline.clone();
+    let shutdown_cpy = shutdown.clone();
+    tokio::select! {
+        _ = shutdown.wait_for_shutdown() => {
+            log::info!("AUDIO CAPTURE | Shutdown received");
+        }
+        _ = tokio::spawn(async move {
+            read_bus(pipeline_cpy, shutdown_cpy).await;
+        }) => {
+            log::info!("AUDIO CAPTURE | Pipeline finished");
+        }
+    }
+
+    pipeline
+        .set_state(gstreamer::State::Null)
+        .expect("Unable to set the pipeline to the `Null` state");
+}
+
+fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
+    let mut elements = HashMap::new();
 
     // Create the elements
     let wasapi2src = gstreamer::ElementFactory::make("wasapi2src")
         .name("wasapi2src")
         .property("loopback", true)
         .property("low-latency", true)
-        .build()
-        .expect("Could not create wasapi2src element.");
+        .build()?;
 
     let queue = gstreamer::ElementFactory::make("queue")
         .name("queue")
-        .build()
-        .expect("Could not create audioconvert element.");
+        .build()?;
 
     let audioconvert = gstreamer::ElementFactory::make("audioconvert")
         .name("audioconvert")
-        .build()
-        .expect("Could not create audioconvert element.");
+        .build()?;
 
     let audioresample = gstreamer::ElementFactory::make("audioresample")
         .name("audioresample")
-        .build()
-        .expect("Could not create audioresample element.");
+        .build()?;
 
     let opusenc = gstreamer::ElementFactory::make("opusenc")
         .name("opusenc")
-        .build()
-        .expect("Could not create opusenc element.");
+        .build()?;
 
     let rtpopuspay = gstreamer::ElementFactory::make("rtpopuspay")
         .name("rtpopuspay")
-        .build()
-        .expect("Could not create rtpopuspay element.");
+        .build()?;
 
+    elements.insert("src", wasapi2src);
+    elements.insert("queue", queue);
+    elements.insert("convert", audioconvert);
+    elements.insert("sample", audioresample);
+    elements.insert("enc", opusenc);
+    elements.insert("pay", rtpopuspay);
+
+    return Ok(elements);
+}
+
+fn create_pipeline(
+    tx_audio: Sender<Vec<u8>>,
+    elements: HashMap<&str, Element>,
+    caps: Caps,
+) -> Result<Pipeline, Error> {
     let sink = gstreamer_app::AppSink::builder()
         .caps(&gstreamer::Caps::builder("application/x-rtp").build())
         .build();
 
-    let pipeline = gstreamer::Pipeline::with_name("pipeline_audio");
+    let pipeline = gstreamer::Pipeline::with_name(PIPELINE_NAME);
 
-    pipeline
-        .add_many([
-            &wasapi2src,
-            &queue,
-            &audioconvert,
-            &audioresample,
-            &opusenc,
-            &rtpopuspay,
-            &sink.upcast_ref(),
-        ])
-        .unwrap();
-
-    wasapi2src
-        .link_filtered(&queue, &caps)
-        .unwrap();
-
-    gstreamer::Element::link_many([
-        &queue,
-        &audioconvert,
-        &audioresample,
-        &opusenc,
-        &rtpopuspay,
+    if let Err(e) = pipeline.add_many([
+        &elements["src"],
+        &elements["queue"],
+        &elements["convert"],
+        &elements["sample"],
+        &elements["enc"],
+        &elements["pay"],
         &sink.upcast_ref(),
-    ])
-    .expect("Elements could not be linked.");
+    ]) {
+        return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
+    }
+
+    if let Err(e) = elements["src"].link_filtered(&elements["queue"], &caps) {
+        return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
+    }
+
+    if let Err(e) = gstreamer::Element::link_many([
+        &elements["queue"],
+        &elements["convert"],
+        &elements["sample"],
+        &elements["enc"],
+        &elements["pay"],
+        &sink.upcast_ref(),
+    ]) {
+        return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
+    }
 
     // Otra opcion podria ser: pay (pad probe) fakesink
+    //TODO: handleo de errores al igual que en video
     sink.set_callbacks(
         gstreamer_app::AppSinkCallbacks::builder()
             // Add a handler to the "new-sample" signal.
@@ -119,43 +184,54 @@ pub fn run(tx_audio: Sender<Vec<u8>>) {
     );
 
     // Start playing
-    pipeline
-        .set_state(gstreamer::State::Playing)
-        .expect("Unable to set the pipeline audio to the `Playing` state");
+    if let Err(e) = pipeline.set_state(gstreamer::State::Playing) {
+        return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
+    }
 
+    return Ok(pipeline);
+}
+
+async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
     // Wait until error or EOS
-    let bus = pipeline.bus().unwrap();
+    let bus = match pipeline.bus() {
+        Some(b) => b,
+        None => {
+            log::error!("AUDIO CAPTURE | Pipeline has no bus");
+            shutdown.notify_error(false).await;
+            return;
+        }
+    };
     for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
         use gstreamer::MessageView;
 
         match msg.view() {
             MessageView::Element(element) => {
-                println!("{:?}", element);
+                log::debug!("AUDIO CAPTURE | Element {:?}", element.structure());
+                continue;
             }
             MessageView::Error(err) => {
-                eprintln!(
-                    "Error received from element {:?} {}",
+                log::error!(
+                    "AUDIO CAPTURE | Error received from element {:?} {}",
                     err.src().map(|s| s.path_string()),
                     err.error()
                 );
-                eprintln!("Debugging information: {:?}", err.debug());
+                shutdown.notify_error(false).await;
                 break;
             }
             MessageView::StateChanged(state_changed) => {
                 if state_changed.src().map(|s| s == &pipeline).unwrap_or(false) {
-                    println!(
-                        "Pipeline state changed from {:?} to {:?}",
+                    log::info!(
+                        "AUDIO CAPTURE | Pipeline state changed from {:?} to {:?}",
                         state_changed.old(),
                         state_changed.current()
                     );
                 }
             }
-            MessageView::Eos(..) => break,
+            MessageView::Eos(..) => {
+                log::info!("AUDIO CAPTURE | End of stream");
+                break;
+            }
             _ => (),
         }
     }
-
-    pipeline
-        .set_state(gstreamer::State::Null)
-        .expect("Unable to set the pipeline to the `Null` state");
 }

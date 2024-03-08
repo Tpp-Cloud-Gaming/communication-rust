@@ -1,0 +1,9 @@
+// AUDIO CAPTURE CONSTANTS
+pub const GSTREAMER_INITIAL_SLEEP: u64 = 60;
+pub const PIPELINE_NAME: &str = "pipeline_audio";
+pub const CAPS_CHANNELS_AMOUNT: u8 = 2;
+
+//AUDIO PLAYBACK CONSTANTS
+pub const CAPS_AUDIO_PAYLOAD: u8 = 96;
+pub const CAPS_AUDIO_CLOCKRATE: u64 = 48000;
+pub const CAPS_AUDIO_ENCODING_NAME: &str = "OPUS";

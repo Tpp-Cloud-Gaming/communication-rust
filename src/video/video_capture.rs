@@ -291,12 +291,12 @@ async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
 
         match msg.view() {
             MessageView::Element(element) => {
-                log::debug!("Element message received: {:?}", element);
+                log::debug!("VIDEO CAPTURE | Element message received: {:?}", element);
                 continue;
             }
             MessageView::Error(err) => {
                 log::error!(
-                    "Error received from element {:?} {}",
+                    "VIDEO CAPTURE | Error received from element {:?} {}",
                     err.src().map(|s| s.path_string()),
                     err.error()
                 );
@@ -306,14 +306,14 @@ async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
             MessageView::StateChanged(state_changed) => {
                 if state_changed.src().map(|s| s == &pipeline).unwrap_or(false) {
                     log::debug!(
-                        "Pipeline state changed from {:?} to {:?}",
+                        "VIDEO CAPTURE | Pipeline state changed from {:?} to {:?}",
                         state_changed.old(),
                         state_changed.current()
                     );
                 }
             }
             MessageView::Eos(..) => {
-                shutdown.notify_error(false).await;
+                log::info!("VIDEO CAPTURE | End of stream received");
                 break;
             }
             _ => (),

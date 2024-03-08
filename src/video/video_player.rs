@@ -179,7 +179,7 @@ async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
                 }
             }
             MessageView::Eos(..) => {
-                shutdown.notify_error(false).await;
+                log::info!("VIDEO PLAYER | End of stream");
                 break;
             }
             _ => (),

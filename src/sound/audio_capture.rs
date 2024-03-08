@@ -8,7 +8,7 @@ use gstreamer::{element_error, glib, prelude::*, Caps, Element, Pipeline};
 
 use crate::utils::shutdown;
 
-use super::audio_const::{CAPS_CHANNELS_AMOUNT, GSTREAMER_INITIAL_SLEEP, PIPELINE_NAME};
+use super::audio_const::{GSTREAMER_INITIAL_SLEEP, PIPELINE_NAME};
 
 pub async fn start_audio_capture(tx_audio: Sender<Vec<u8>>, shutdown: shutdown::Shutdown) {
     shutdown.add_task().await;
@@ -27,7 +27,7 @@ pub async fn start_audio_capture(tx_audio: Sender<Vec<u8>>, shutdown: shutdown::
 
     let caps = gstreamer::Caps::builder("audio/x-raw")
         //.field("rate", 48000)
-        .field("channels", CAPS_CHANNELS_AMOUNT)
+        .field("channels", 2)
         .build();
 
     let elements = match create_elements() {

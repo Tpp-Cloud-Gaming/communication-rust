@@ -8,8 +8,6 @@ use gstreamer::{glib, prelude::*, Element, Pipeline};
 
 use crate::utils::shutdown;
 
-use super::audio_const::{CAPS_AUDIO_CLOCKRATE, CAPS_AUDIO_ENCODING_NAME, CAPS_AUDIO_PAYLOAD};
-
 pub async fn start_audio_player(rx_audio: Receiver<Vec<u8>>, shutdown: shutdown::Shutdown) {
     // Initialize GStreamer
     if let Err(e) = gstreamer::init() {
@@ -24,9 +22,9 @@ pub async fn start_audio_player(rx_audio: Receiver<Vec<u8>>, shutdown: shutdown:
     // Create the caps
     let caps = gstreamer::Caps::builder("application/x-rtp")
         .field("media", "audio")
-        .field("payload", CAPS_AUDIO_PAYLOAD)
-        .field("clock-rate", CAPS_AUDIO_CLOCKRATE)
-        .field("encoding-name", CAPS_AUDIO_ENCODING_NAME)
+        .field("payload", 96)
+        .field("clock-rate", 48000)
+        .field("encoding-name", "OPUS")
         .build();
 
     let source = gstreamer_app::AppSrc::builder()

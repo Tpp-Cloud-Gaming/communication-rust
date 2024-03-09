@@ -238,7 +238,7 @@ fn set_peer_events(
         if connection_state == RTCIceConnectionState::Connected {
             notify_tx.notify_waiters();
             let barrier_cpy = barrier.clone();
-            Box::pin(async move {
+            return Box::pin(async move {
                 println!("SENDER | Barrier espera");
                 barrier_cpy.wait().await;
                 println!("SENDER | Barrier released");

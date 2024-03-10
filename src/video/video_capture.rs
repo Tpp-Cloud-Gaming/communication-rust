@@ -1,25 +1,25 @@
-use gstreamer::{element_error, glib, prelude::*, Bus, Element, Pipeline};
+use gstreamer::{element_error, glib, prelude::*, Element, Pipeline};
 use std::{
     collections::HashMap,
     io::{self, Error},
     sync::{mpsc::Sender, Arc},
-    thread::sleep,
-    time::Duration,
 };
-use tokio::sync::{Barrier, Mutex};
+use tokio::sync::Barrier;
 use winapi::{
     shared::{
         minwindef::{BOOL, LPARAM, TRUE},
         windef::HWND,
     },
-    um::winuser::{EnumWindows, GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible},
+    um::winuser::{
+        /*EnumWindows ,*/ GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible,
+    },
 };
 
-use crate::utils::shutdown::{self, Shutdown};
+use crate::utils::shutdown::{self};
 
-use super::video_const::{GSTREAMER_FRAMES, GSTREAMER_INITIAL_SLEEP};
+use super::video_const::GSTREAMER_FRAMES;
 
-unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+unsafe extern "system" fn _enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let hwnds: &mut Vec<(HWND, String, String)> =
         &mut *(lparam as *mut Vec<(HWND, String, String)>);
 
@@ -156,7 +156,6 @@ pub async fn start_video_capture(
             "VIDEO CAPTURE | Failed to set the pipeline to the `Null` state: {}",
             e.to_string()
         );
-        return;
     }
 }
 
@@ -197,7 +196,7 @@ fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Element>,
     elements.insert("enc", mfh264enc);
     elements.insert("pay", rtph264pay);
 
-    return Ok(elements);
+    Ok(elements)
 }
 
 fn create_pipeline(
@@ -277,7 +276,7 @@ fn create_pipeline(
             })
             .build(),
     );
-    return Ok(pipeline);
+    Ok(pipeline)
 }
 
 async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {

@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 use std::io::Error;
 use std::sync::mpsc::Sender;
-
 use std::sync::Arc;
-use std::{thread::sleep, time::Duration};
 
 use gstreamer::{element_error, glib, prelude::*, Caps, Element, Pipeline};
-use tokio::sync::{Barrier, Mutex};
+use tokio::sync::Barrier;
 
 use crate::utils::shutdown;
 
-use super::audio_const::{GSTREAMER_INITIAL_SLEEP, PIPELINE_NAME};
+use super::audio_const::PIPELINE_NAME;
 
 pub async fn start_audio_capture(
     tx_audio: Sender<Vec<u8>>,
@@ -110,7 +108,7 @@ fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> 
     elements.insert("enc", opusenc);
     elements.insert("pay", rtpopuspay);
 
-    return Ok(elements);
+    Ok(elements)
 }
 
 fn create_pipeline(
@@ -195,7 +193,7 @@ fn create_pipeline(
         return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
     }
 
-    return Ok(pipeline);
+    Ok(pipeline)
 }
 
 async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {

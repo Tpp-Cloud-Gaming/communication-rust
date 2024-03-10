@@ -6,7 +6,6 @@ pub mod video;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
 use std::sync::{mpsc, Arc};
-use std::thread;
 
 use crate::input::input_capture::InputCapture;
 use crate::video::video_player::start_video_player;

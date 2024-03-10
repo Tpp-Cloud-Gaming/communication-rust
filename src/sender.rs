@@ -79,7 +79,7 @@ async fn main() -> Result<(), Error> {
 
     let pc = comunication.get_peer();
 
-    let (rtp_sender, audio_track) =
+    let (_rtp_sender, audio_track) =
         create_track(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
     let (rtp_video_sender, video_track) =
         create_track_2(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;

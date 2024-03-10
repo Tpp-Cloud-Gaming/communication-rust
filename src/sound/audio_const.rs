@@ -1,5 +1,4 @@
 // AUDIO CAPTURE CONSTANTS
-pub const GSTREAMER_INITIAL_SLEEP: u64 = 60;
 pub const PIPELINE_NAME: &str = "pipeline_audio";
 pub const CAPS_CHANNELS_AMOUNT: u8 = 2;
 

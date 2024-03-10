@@ -104,7 +104,7 @@ fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> 
     elements.insert("sample", audioresample);
     elements.insert("sink", autoaudiosink);
 
-    return Ok(elements);
+    Ok(elements)
 }
 
 fn create_pipeline(
@@ -163,7 +163,7 @@ fn create_pipeline(
             })
             .build(),
     );
-    return Ok(pipeline);
+    Ok(pipeline)
 }
 
 async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {

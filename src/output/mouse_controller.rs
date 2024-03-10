@@ -35,3 +35,9 @@ impl MouseController {
         }));
     }
 }
+
+impl Default for MouseController {
+    fn default() -> Self {
+        Self::new()
+    }
+}

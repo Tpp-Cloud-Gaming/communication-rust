@@ -92,7 +92,7 @@ fn create_elements() -> Result<HashMap<&'static str, Element>, Error> {
     elements.insert("dec", d3d11h264dec);
     elements.insert("sink", d3d11videosink);
 
-    return Ok(elements);
+    Ok(elements)
 }
 
 fn create_pipeline(
@@ -160,7 +160,7 @@ fn create_pipeline(
         }),
     );
 
-    return Ok(pipeline);
+    Ok(pipeline)
 }
 
 async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {

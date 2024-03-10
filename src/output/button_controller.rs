@@ -71,3 +71,9 @@ pub fn send_input_key(virtual_key: i32, up: bool) {
         SendInput(1, &mut input, mem::size_of::<INPUT>() as i32);
     }
 }
+
+impl Default for ButtonController {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -73,7 +73,7 @@ impl InputCapture {
 
             }
         }
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -217,7 +217,7 @@ async fn handle_button_action(
             ));
         };
     }
-    return Ok(());
+    Ok(())
 }
 
 fn button_to_i32(button: Button) -> i32 {

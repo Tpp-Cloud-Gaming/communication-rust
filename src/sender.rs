@@ -18,7 +18,6 @@ use crate::webrtcommunication::communication::{encode, Communication};
 use input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
 use output::button_controller::ButtonController;
 use output::mouse_controller::MouseController;
-use tokio::sync::Notify;
 use webrtc::data_channel::RTCDataChannel;
 
 use utils::shutdown;
@@ -45,7 +44,7 @@ async fn main() -> Result<(), Error> {
     env_logger::builder().format_target(false).init();
     let shutdown = Shutdown::new();
 
-    let barrier = Arc::new(Barrier::new(3));
+    let barrier = Arc::new(Barrier::new(5));
 
     //Create audio frames channels
     let (tx_audio, rx_audio): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
@@ -55,10 +54,6 @@ async fn main() -> Result<(), Error> {
 
     let comunication =
         check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
-
-    let notify_tx = Arc::new(Notify::new());
-    let notify_audio = notify_tx.clone();
-    let notify_video = notify_tx.clone();
 
     let shutdown_audio = shutdown.clone();
 
@@ -80,9 +75,9 @@ async fn main() -> Result<(), Error> {
     let pc = comunication.get_peer();
 
     let (_rtp_sender, audio_track) =
-        create_track(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
+        create_track_sample(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
     let (rtp_video_sender, video_track) =
-        create_track_2(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
+        create_track_rtp(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
 
     // Start the latency measurement
     check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
@@ -94,17 +89,19 @@ async fn main() -> Result<(), Error> {
         read_rtcp(shutdown_cpy_3.clone(), rtp_video_sender).await;
     });
 
+    let barrier_audio_send = barrier.clone();
     let shutdown_cpy_2 = shutdown.clone();
     tokio::spawn(async move {
-        start_audio_sending(notify_audio, rx_audio, audio_track, shutdown_cpy_2).await;
+        start_audio_sending(barrier_audio_send, rx_audio, audio_track, shutdown_cpy_2).await;
     });
 
+    let barrier_video_send = barrier.clone();
     let shutdown_cpy_4 = shutdown.clone();
     tokio::spawn(async move {
-        start_video_sending(notify_video, rx_video, video_track, shutdown_cpy_4).await;
+        start_video_sending(barrier_video_send, rx_video, video_track, shutdown_cpy_4).await;
     });
 
-    set_peer_events(&pc, notify_tx, done_tx, barrier.clone());
+    set_peer_events(&pc, done_tx, barrier.clone());
 
     // Create an answer to send to the other process
     let offer = match pc.create_offer(None).await {
@@ -167,7 +164,7 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn create_track(
+async fn create_track_sample(
     pc: Arc<RTCPeerConnection>,
     shutdown: shutdown::Shutdown,
     mime_type: &str,
@@ -196,7 +193,7 @@ async fn create_track(
     }
 }
 
-async fn create_track_2(
+async fn create_track_rtp(
     pc: Arc<RTCPeerConnection>,
     shutdown: shutdown::Shutdown,
     mime_type: &str,
@@ -227,7 +224,6 @@ async fn create_track_2(
 
 fn set_peer_events(
     pc: &Arc<RTCPeerConnection>,
-    notify_tx: Arc<Notify>,
     done_tx: tokio::sync::mpsc::Sender<()>,
     barrier: Arc<Barrier>,
 ) {
@@ -236,7 +232,6 @@ fn set_peer_events(
     pc.on_ice_connection_state_change(Box::new(move |connection_state: RTCIceConnectionState| {
         log::info!("SENDER | ICE Connection State has changed | {connection_state}");
         if connection_state == RTCIceConnectionState::Connected {
-            notify_tx.notify_waiters();
             let barrier_cpy = barrier.clone();
             return Box::pin(async move {
                 println!("SENDER | Barrier espera");
@@ -291,15 +286,15 @@ async fn read_rtcp(shutdown: shutdown::Shutdown, rtp_sender: Arc<RTCRtpSender>) 
 }
 
 async fn start_audio_sending(
-    notify_audio: Arc<Notify>,
+    barrier_audio_send: Arc<Barrier>,
     rx: Receiver<Vec<u8>>,
     audio_track: Arc<TrackLocalStaticSample>,
     shutdown: shutdown::Shutdown,
 ) {
     println!("ARRANCO");
     shutdown.add_task().await;
-    // Wait for connection established
-    notify_audio.notified().await;
+    // Wait for other tasks
+    barrier_audio_send.wait().await;
 
     let mut error_tracker =
         utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
@@ -355,7 +350,7 @@ async fn start_audio_sending(
 }
 
 async fn start_video_sending(
-    notify_video: Arc<Notify>,
+    barrier_video_send: Arc<Barrier>,
     rx: Receiver<Vec<u8>>,
     video_track: Arc<TrackLocalStaticRTP>,
     shutdown: shutdown::Shutdown,
@@ -363,7 +358,7 @@ async fn start_video_sending(
     shutdown.add_task().await;
     // Wait for connection established
     // TODO: Esto puede generar delay me parece
-    notify_video.notified().await;
+    barrier_video_send.wait().await;
 
     let mut error_tracker =
         utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);

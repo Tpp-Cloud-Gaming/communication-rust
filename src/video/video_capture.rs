@@ -17,7 +17,7 @@ use winapi::{
 
 use crate::utils::shutdown::{self};
 
-use super::video_const::GSTREAMER_FRAMES;
+use super::video_const::{ENCODER_BITRATE, GSTREAMER_FRAMES};
 
 unsafe extern "system" fn _enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
     let hwnds: &mut Vec<(HWND, String, String)> =
@@ -172,20 +172,22 @@ fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Element>,
         .name("videoconvert")
         .build()?;
 
-    let mfh264enc = gstreamer::ElementFactory::make("amfh264enc")
+    let m264enc = if let Ok(enc) = gstreamer::ElementFactory::make("amfh264enc")
         .name("amfh264enc")
         .property_from_str("usage", "ultra-low-latency")
         .property(
             "bitrate",
-            <gstreamer::glib::Value as From<u32>>::from(10000),
+            <gstreamer::glib::Value as From<u32>>::from(ENCODER_BITRATE),
         )
-        .build()?;
-
-    // let mfh264enc = gstreamer::ElementFactory::make("mfh264enc")
-    //     .name("mfh264enc")
-    //     .property("low-latency", true)
-    //     .build()
-    //     .expect("Could not create mfh264enc element.");
+        .build()
+    {
+        enc
+    } else {
+        gstreamer::ElementFactory::make("mfh264enc")
+            .name("mfh264enc")
+            .property("low-latency", true)
+            .build()?
+    };
 
     let rtph264pay = gstreamer::ElementFactory::make("rtph264pay")
         .name("rtph264pay")
@@ -193,7 +195,7 @@ fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Element>,
 
     elements.insert("src", d3d11screencapturesrc);
     elements.insert("convert", videoconvert);
-    elements.insert("enc", mfh264enc);
+    elements.insert("enc", m264enc);
     elements.insert("pay", rtph264pay);
 
     Ok(elements)

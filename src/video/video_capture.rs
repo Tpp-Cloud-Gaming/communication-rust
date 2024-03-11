@@ -2,9 +2,10 @@ use gstreamer::{element_error, glib, prelude::*, Element, Pipeline};
 use std::{
     collections::HashMap,
     io::{self, Error},
-    sync::{mpsc::Sender, Arc},
+    sync::{ Arc},
 };
 use tokio::sync::Barrier;
+use tokio::sync::mpsc::Sender;
 use winapi::{
     shared::{
         minwindef::{BOOL, LPARAM, TRUE},
@@ -186,6 +187,10 @@ fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Element>,
         gstreamer::ElementFactory::make("mfh264enc")
             .name("mfh264enc")
             .property("low-latency", true)
+            .property(
+                "bitrate",
+                <gstreamer::glib::Value as From<u32>>::from(ENCODER_BITRATE),
+            )
             .build()?
     };
 
@@ -270,9 +275,16 @@ fn create_pipeline(
                 })?;
 
                 let samples = map.as_slice();
-                tx_video
+                // tx_video
+                //     .send(samples.to_vec())
+                //     .expect("Error enviando sample");
+
+                Box::pin(async  {
+                    tx_video
                     .send(samples.to_vec())
-                    .expect("Error enviando sample");
+                    .await.expect("Error enviando sample");    
+                });
+                
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })

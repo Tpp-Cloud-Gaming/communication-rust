@@ -5,11 +5,14 @@ pub mod utils;
 pub mod video;
 pub mod webrtcommunication;
 use std::io::{Error, ErrorKind};
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+//use std::sync::mpsc;
+//use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Barrier;
+use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::Receiver;
 
 use crate::utils::shutdown::Shutdown;
 use crate::video::video_capture::start_video_capture;
@@ -47,10 +50,13 @@ async fn main() -> Result<(), Error> {
     let barrier = Arc::new(Barrier::new(5));
 
     //Create audio frames channels
-    let (tx_audio, rx_audio): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
+    //let (tx_audio, rx_audio): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
+    let (tx_audio, rx_audio) = channel(100);
+    
 
     // Create video frame channels
-    let (tx_video, rx_video): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
+    //let (tx_video, rx_video): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
+    let (tx_video, rx_video) = channel(100);
 
     let comunication =
         check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
@@ -287,7 +293,7 @@ async fn read_rtcp(shutdown: shutdown::Shutdown, rtp_sender: Arc<RTCRtpSender>) 
 
 async fn start_audio_sending(
     barrier_audio_send: Arc<Barrier>,
-    rx: Receiver<Vec<u8>>,
+    mut rx: Receiver<Vec<u8>>,
     audio_track: Arc<TrackLocalStaticSample>,
     shutdown: shutdown::Shutdown,
 ) {
@@ -300,21 +306,21 @@ async fn start_audio_sending(
         utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
     loop {
-        let data = match rx.recv() {
-            Ok(d) => {
+        let data = match rx.recv().await {
+            Some(d) => {
                 error_tracker.increment();
                 d
             }
-            Err(err) => {
+            None => {
                 if error_tracker.increment_with_error() {
                     log::error!(
-                        "SENDER | Max attemps | Error receiving audio data | {}",
-                        err
+                        "SENDER | Max attemps | Error receiving audio data | ",
+                        
                     );
                     shutdown.notify_error(false).await;
                     return;
                 } else {
-                    log::warn!("SENDER | Error receiving audio data | {}", err);
+                    log::warn!("SENDER | Error receiving audio data | ");
                 };
                 continue;
             }
@@ -351,7 +357,7 @@ async fn start_audio_sending(
 
 async fn start_video_sending(
     barrier_video_send: Arc<Barrier>,
-    rx: Receiver<Vec<u8>>,
+    mut rx: Receiver<Vec<u8>>,
     video_track: Arc<TrackLocalStaticRTP>,
     shutdown: shutdown::Shutdown,
 ) {
@@ -364,21 +370,21 @@ async fn start_video_sending(
         utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
     loop {
-        let data = match rx.recv() {
-            Ok(d) => {
+        let data = match rx.recv().await {
+            Some(d) => {
                 error_tracker.increment();
                 d
             }
-            Err(err) => {
+            None => {
                 if error_tracker.increment_with_error() {
                     log::error!(
-                        "SENDER | Max attemps | Error receiving video data | {}",
-                        err
+                        "SENDER | Max attemps | Error receiving video data |",
+                
                     );
                     shutdown.notify_error(false).await;
                     return;
                 } else {
-                    log::warn!("SENDER | Error receiving video data | {}", err);
+                    log::warn!("SENDER | Error receiving video data |");
                 };
                 continue;
             }

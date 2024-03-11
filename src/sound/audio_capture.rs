@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::io::Error;
-use std::sync::mpsc::Sender;
+//use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
 use gstreamer::{element_error, glib, prelude::*, Caps, Element, Pipeline};
 use tokio::sync::Barrier;
+use tokio::sync::mpsc::Sender;
 
 use crate::utils::shutdown;
 
@@ -179,9 +180,15 @@ fn create_pipeline(
                 })?;
 
                 let samples = map.as_slice();
-                tx_audio
-                    .send(samples.to_vec())
-                    .expect("Error enviando sample de audio");
+
+                Box::pin(async{
+                
+                    tx_audio
+                        .send(samples.to_vec())
+                        .await
+                        .expect("Error enviando sample de audio");
+                });
+                
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })

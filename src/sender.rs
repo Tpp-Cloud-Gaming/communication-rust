@@ -297,7 +297,6 @@ async fn start_audio_sending(
     audio_track: Arc<TrackLocalStaticSample>,
     shutdown: shutdown::Shutdown,
 ) {
-    println!("ARRANCO");
     shutdown.add_task().await;
     // Wait for other tasks
     barrier_audio_send.wait().await;

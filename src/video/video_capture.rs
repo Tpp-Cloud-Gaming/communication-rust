@@ -4,7 +4,7 @@ use std::{
     io::{self, Error},
     sync::{ Arc},
 };
-use tokio::sync::Barrier;
+use tokio::{runtime::Runtime, sync::Barrier};
 use tokio::sync::mpsc::Sender;
 use winapi::{
     shared::{
@@ -275,15 +275,14 @@ fn create_pipeline(
                 })?;
 
                 let samples = map.as_slice();
-                // tx_video
-                //     .send(samples.to_vec())
-                //     .expect("Error enviando sample");
-
-                Box::pin(async  {
+                let rt = Runtime::new().unwrap();
+                rt.block_on(async {
                     tx_video
-                    .send(samples.to_vec())
-                    .await.expect("Error enviando sample");    
+                        .send(samples.to_vec())
+                        .await
+                        .expect("Error sending audio sample");
                 });
+
                 
 
                 Ok(gstreamer::FlowSuccess::Ok)

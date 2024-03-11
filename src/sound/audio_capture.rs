@@ -4,6 +4,7 @@ use std::io::Error;
 use std::sync::Arc;
 
 use gstreamer::{element_error, glib, prelude::*, Caps, Element, Pipeline};
+use tokio::runtime::Runtime;
 use tokio::sync::Barrier;
 use tokio::sync::mpsc::Sender;
 
@@ -181,14 +182,15 @@ fn create_pipeline(
 
                 let samples = map.as_slice();
 
-                Box::pin(async{
-                
+                let rt = Runtime::new().unwrap();
+                rt.block_on(async {
+                    
                     tx_audio
                         .send(samples.to_vec())
                         .await
-                        .expect("Error enviando sample de audio");
+                        .expect("Error sending audio sample");
                 });
-                
+
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })

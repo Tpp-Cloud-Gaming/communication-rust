@@ -11,7 +11,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Barrier;
 use tokio::sync::mpsc::channel;
-use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::Receiver;
 
 use crate::utils::shutdown::Shutdown;

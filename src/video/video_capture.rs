@@ -2,7 +2,7 @@ use gstreamer::{element_error, glib, prelude::*, Element, Pipeline};
 use std::{
     collections::HashMap,
     io::{self, Error},
-    sync::{ Arc},
+    sync::Arc,
 };
 use tokio::{runtime::Runtime, sync::Barrier};
 use tokio::sync::mpsc::Sender;
@@ -12,47 +12,15 @@ use winapi::{
         windef::HWND,
     },
     um::winuser::{
-        /*EnumWindows ,*/ GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible,
+        GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible,
     },
 };
 
-use crate::utils::shutdown::{self};
+use crate::utils::{gstreamer_utils::read_bus, shutdown};
 
-use super::video_const::{ENCODER_BITRATE, GSTREAMER_FRAMES};
+use super::video_const::{ENCODER_BITRATE, GSTREAMER_FRAMES, VIDEO_CAPTURE_PIPELINE_NAME};
 
-unsafe extern "system" fn _enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    let hwnds: &mut Vec<(HWND, String, String)> =
-        &mut *(lparam as *mut Vec<(HWND, String, String)>);
 
-    let mut class_name = [0u16; 256];
-    let mut window_text = [0u16; 256];
-
-    // Get class name of the window
-    GetClassNameW(hwnd, class_name.as_mut_ptr(), 256);
-
-    // Get window text
-    GetWindowTextW(hwnd, window_text.as_mut_ptr(), 256);
-
-    // Convert window text and class name to Rust strings
-    let binding = String::from_utf16(&window_text).unwrap();
-    let window_text_as_str = binding.trim_matches(char::from(0));
-    let binding = String::from_utf16(&class_name).unwrap();
-    let class_name_as_str = binding.trim_matches(char::from(0));
-
-    //let a = &lparam as *mut Vec<isize>;
-    if IsWindowVisible(hwnd) == TRUE
-        && IsWindowEnabled(hwnd) == TRUE
-        && !window_text_as_str.is_empty()
-    {
-        hwnds.push((
-            hwnd,
-            class_name_as_str.to_string(),
-            window_text_as_str.to_string(),
-        ));
-    }
-
-    TRUE
-}
 
 pub async fn start_video_capture(
     tx_video: Sender<Vec<u8>>,
@@ -71,6 +39,7 @@ pub async fn start_video_capture(
         return;
     };
     barrier.wait().await;
+
     println!("VIDEO CAPTURE | Barrier passed");
     // let mut hwnds: Vec<(HWND, String, String)> = Vec::new();
     // unsafe { EnumWindows(Some(enumerate_callback), &mut hwnds as *mut _ as LPARAM)};
@@ -212,23 +181,17 @@ fn create_pipeline(
     caps: gstreamer::Caps,
 ) -> Result<Pipeline, Error> {
     let sink = gstreamer_app::AppSink::builder()
-        // Tell the appsink what format we want.
-        // This can be set after linking the two objects, because format negotiation between
-        // both elements will happen during pre-rolling of the pipeline.
         .caps(&gstreamer::Caps::builder("application/x-rtp").build())
         .build();
 
-    // Create the empty pipeline
-    let pipeline = gstreamer::Pipeline::with_name("pipeline");
+    let pipeline = gstreamer::Pipeline::with_name(VIDEO_CAPTURE_PIPELINE_NAME);
 
-    // Build the pipeline Note that we are NOT linking the source at this
-    // point. We will do it later.
     if let Err(e) = pipeline.add_many([
         &elements["src"],
         &elements["convert"],
         &elements["enc"],
         &elements["pay"],
-        /*&h264parse,*/ &sink.upcast_ref(), /*, &d3d11h264dec, &d3d11videosink */
+        &sink.upcast_ref(),
     ]) {
         return Err(Error::new(io::ErrorKind::Other, e.to_string()));
     }
@@ -241,7 +204,7 @@ fn create_pipeline(
         &elements["convert"],
         &elements["enc"],
         &elements["pay"],
-        /*&h264parse,*/ &sink.upcast_ref(), /*, &d3d11h264dec, &d3d11videosink */
+        &sink.upcast_ref(),
     ]) {
         return Err(Error::new(io::ErrorKind::Other, e.to_string()));
     };
@@ -292,48 +255,4 @@ fn create_pipeline(
     Ok(pipeline)
 }
 
-async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
-    // Wait until error or EOS
-    let bus = match pipeline.bus() {
-        Some(b) => b,
-        None => {
-            shutdown.notify_error(false).await;
-            log::error!("VIDEO CAPTURE | Pipeline bus not found");
-            return;
-        }
-    };
 
-    for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
-        use gstreamer::MessageView;
-
-        match msg.view() {
-            MessageView::Element(element) => {
-                log::debug!("VIDEO CAPTURE | Element message received: {:?}", element);
-                continue;
-            }
-            MessageView::Error(err) => {
-                log::error!(
-                    "VIDEO CAPTURE | Error received from element {:?} {}",
-                    err.src().map(|s| s.path_string()),
-                    err.error()
-                );
-                shutdown.notify_error(false).await;
-                break;
-            }
-            MessageView::StateChanged(state_changed) => {
-                if state_changed.src().map(|s| s == &pipeline).unwrap_or(false) {
-                    log::debug!(
-                        "VIDEO CAPTURE | Pipeline state changed from {:?} to {:?}",
-                        state_changed.old(),
-                        state_changed.current()
-                    );
-                }
-            }
-            MessageView::Eos(..) => {
-                log::info!("VIDEO CAPTURE | End of stream received");
-                break;
-            }
-            _ => (),
-        }
-    }
-}

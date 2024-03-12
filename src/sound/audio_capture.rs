@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::io::Error;
-//use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
 use gstreamer::{element_error, glib, prelude::*, Caps, Element, Pipeline};
@@ -8,9 +7,9 @@ use tokio::runtime::Runtime;
 use tokio::sync::Barrier;
 use tokio::sync::mpsc::Sender;
 
+use crate::utils::gstreamer_utils::read_bus;
 use crate::utils::shutdown;
-
-use super::audio_const::PIPELINE_NAME;
+use super::audio_const::AUDIO_CAPTURE_PIPELINE_NAME;
 
 pub async fn start_audio_capture(
     tx_audio: Sender<Vec<u8>>,
@@ -122,7 +121,7 @@ fn create_pipeline(
         .caps(&gstreamer::Caps::builder("application/x-rtp").build())
         .build();
 
-    let pipeline = gstreamer::Pipeline::with_name(PIPELINE_NAME);
+    let pipeline = gstreamer::Pipeline::with_name(AUDIO_CAPTURE_PIPELINE_NAME);
 
     if let Err(e) = pipeline.add_many([
         &elements["src"],
@@ -158,7 +157,14 @@ fn create_pipeline(
             // Add a handler to the "new-sample" signal.
             .new_sample(move |appsink| {
                 // Pull the sample in question out of the appsink's buffer.
-                let sample = appsink.pull_sample().unwrap();
+                let sample = appsink.pull_sample().map_err(|_| {
+                    element_error!(
+                        appsink,
+                        gstreamer::ResourceError::Failed,
+                        ("Failed to pull sample")
+                    );
+                    gstreamer::FlowError::Error
+                })?;
 
                 let buffer = sample.buffer().ok_or_else(|| {
                     element_error!(
@@ -166,7 +172,6 @@ fn create_pipeline(
                         gstreamer::ResourceError::Failed,
                         ("Failed to get buffer from appsink in audio pipeline")
                     );
-
                     gstreamer::FlowError::Error
                 })?;
 
@@ -182,7 +187,14 @@ fn create_pipeline(
 
                 let samples = map.as_slice();
 
-                let rt = Runtime::new().unwrap();
+                let rt = Runtime::new().map_err(|_| {
+                    element_error!(
+                        appsink,
+                        gstreamer::ResourceError::Failed,
+                        ("Failed to create runtime")
+                    );
+                    gstreamer::FlowError::Error
+                })?;
                 rt.block_on(async {
                     
                     tx_audio
@@ -203,49 +215,4 @@ fn create_pipeline(
     }
 
     Ok(pipeline)
-}
-
-async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
-    // Wait until error or EOS
-    let bus = match pipeline.bus() {
-        Some(b) => b,
-        None => {
-            log::error!("AUDIO CAPTURE | Pipeline has no bus");
-            shutdown.notify_error(false).await;
-            return;
-        }
-    };
-    for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
-        use gstreamer::MessageView;
-
-        match msg.view() {
-            MessageView::Element(element) => {
-                log::debug!("AUDIO CAPTURE | Element {:?}", element.structure());
-                continue;
-            }
-            MessageView::Error(err) => {
-                log::error!(
-                    "AUDIO CAPTURE | Error received from element {:?} {}",
-                    err.src().map(|s| s.path_string()),
-                    err.error()
-                );
-                shutdown.notify_error(false).await;
-                break;
-            }
-            MessageView::StateChanged(state_changed) => {
-                if state_changed.src().map(|s| s == &pipeline).unwrap_or(false) {
-                    log::info!(
-                        "AUDIO CAPTURE | Pipeline state changed from {:?} to {:?}",
-                        state_changed.old(),
-                        state_changed.current()
-                    );
-                }
-            }
-            MessageView::Eos(..) => {
-                log::info!("AUDIO CAPTURE | End of stream");
-                break;
-            }
-            _ => (),
-        }
-    }
 }

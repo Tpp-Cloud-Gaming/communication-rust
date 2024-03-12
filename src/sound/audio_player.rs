@@ -6,7 +6,9 @@ use std::{
 
 use gstreamer::{glib, prelude::*, Element, Pipeline};
 
-use crate::utils::shutdown;
+use crate::utils::{gstreamer_utils::read_bus, shutdown};
+
+use super::audio_const::AUDIO_PLAYER_PIPELINE_NAME;
 
 pub async fn start_audio_player(rx_audio: Receiver<Vec<u8>>, shutdown: shutdown::Shutdown) {
     // Initialize GStreamer
@@ -113,7 +115,7 @@ fn create_pipeline(
     source: gstreamer_app::AppSrc,
 ) -> Result<Pipeline, Error> {
     // Create the empty pipeline
-    let pipeline = gstreamer::Pipeline::with_name("pipeline");
+    let pipeline = gstreamer::Pipeline::with_name(AUDIO_PLAYER_PIPELINE_NAME);
 
     if let Err(e) = pipeline.add_many([
         source.upcast_ref(),
@@ -166,44 +168,3 @@ fn create_pipeline(
     Ok(pipeline)
 }
 
-async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
-    // Wait until error or EOS
-    let bus = match pipeline.bus() {
-        Some(b) => b,
-        None => {
-            log::error!("AUDIO PLAYER | Error getting pipeline bus");
-            shutdown.notify_error(false).await;
-            return;
-        }
-    };
-    for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
-        use gstreamer::MessageView;
-
-        match msg.view() {
-            MessageView::Error(err) => {
-                log::error!(
-                    "AUDIO PLAYER | Error received from element {:?} {}",
-                    err.src().map(|s| s.path_string()),
-                    err.error()
-                );
-                shutdown.notify_error(false).await;
-                break;
-            }
-            MessageView::StateChanged(state_changed) => {
-                if state_changed.src().map(|s| s == &pipeline).unwrap_or(false) {
-                    log::debug!(
-                        "AUDIO PLAYER | Pipeline state changed from {:?} to {:?}",
-                        state_changed.old(),
-                        state_changed.current()
-                    );
-                    continue;
-                }
-            }
-            MessageView::Eos(..) => {
-                log::info!("AUDIO PLAYER | End of stream");
-                break;
-            }
-            _ => (),
-        }
-    }
-}

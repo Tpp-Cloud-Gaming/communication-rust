@@ -1,9 +1,11 @@
 use std::{collections::HashMap, io::Error, sync::mpsc::Receiver};
 
-use gstreamer::{glib, prelude::*, Caps, Element, Pipeline};
+use gstreamer::{glib, prelude::*, Caps, Element};
 use winapi::um::winuser::ShowCursor;
 
-use crate::utils::shutdown;
+use crate::utils::{gstreamer_utils::read_bus, shutdown};
+
+use super::video_const::VIDEO_PLAYER_PIPELINE_NAME;
 
 pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown: shutdown::Shutdown) {
     shutdown.add_task().await;
@@ -108,7 +110,7 @@ fn create_pipeline(
         .build();
 
     // Create the empty pipeline
-    let pipeline = gstreamer::Pipeline::with_name("pipeline");
+    let pipeline = gstreamer::Pipeline::with_name(VIDEO_PLAYER_PIPELINE_NAME);
 
     if let Err(e) = pipeline.add_many([
         source.upcast_ref(),
@@ -163,43 +165,3 @@ fn create_pipeline(
     Ok(pipeline)
 }
 
-async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
-    // Wait until error or EOS
-    let bus = match pipeline.bus() {
-        Some(b) => b,
-        None => {
-            log::error!("VIDEO PLAYER | Pipeline has no bus");
-            shutdown.notify_error(false).await;
-            return;
-        }
-    };
-    for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
-        use gstreamer::MessageView;
-
-        match msg.view() {
-            MessageView::Error(err) => {
-                log::error!(
-                    "VIDEO PLAYER | Error received from element {:?} {}",
-                    err.src().map(|s| s.path_string()),
-                    err.error()
-                );
-                shutdown.notify_error(false).await;
-                break;
-            }
-            MessageView::StateChanged(state_changed) => {
-                if state_changed.src().map(|s| s == &pipeline).unwrap_or(false) {
-                    log::debug!(
-                        "VIDEO PLAYER | Pipeline state changed from {:?} to {:?}",
-                        state_changed.old(),
-                        state_changed.current()
-                    );
-                }
-            }
-            MessageView::Eos(..) => {
-                log::info!("VIDEO PLAYER | End of stream");
-                break;
-            }
-            _ => (),
-        }
-    }
-}

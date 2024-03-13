@@ -6,13 +6,25 @@ use webrtc::data_channel::RTCDataChannel;
 use winapi::um::winuser::*;
 use winput::Button;
 
+
+/// # ButtonController
+///
+/// The `ButtonController` struct provides functionality for handling keyboard and mouse events
+/// via a WebRTC data channel.
 pub struct ButtonController {}
 
 impl ButtonController {
+    /// Creates a new `ButtonController`.
     pub fn new() -> ButtonController {
         ButtonController {}
     }
 
+    /// Starts the keyboard controller by registering a callback for incoming messages on the
+    /// provided WebRTC data channel.
+    ///
+    /// # Arguments
+    ///
+    /// * `ch` - An Arc reference to the RTCDataChannel.
     pub fn start_keyboard_controller(ch: Arc<RTCDataChannel>) {
         ch.on_message(Box::new(move |msg: DataChannelMessage| {
             Box::pin(async move {
@@ -20,7 +32,6 @@ impl ButtonController {
                 let (action, rest) = s.split_at(1);
                 let key = rest.parse::<u8>().unwrap();
 
-                //let (action, key) = get_action_and_key(&msg.data);
                 match action {
                     PRESS_KEYBOARD_ACTION => {
                         send_input_key(key as i32, false);
@@ -43,6 +54,7 @@ impl ButtonController {
     }
 }
 
+/// Maps the numeric key value to the corresponding mouse button.
 fn get_mouse_button(key: u8) -> Button {
     match key {
         0 => Button::Left,
@@ -54,6 +66,13 @@ fn get_mouse_button(key: u8) -> Button {
     }
 }
 
+
+/// Sends a keyboard input event.
+///
+/// # Arguments
+///
+/// * `virtual_key` - The virtual key code.
+/// * `up` - Indicates whether the key is being released (true) or pressed (false)
 pub fn send_input_key(virtual_key: i32, up: bool) {
     unsafe {
         let mut input = INPUT {

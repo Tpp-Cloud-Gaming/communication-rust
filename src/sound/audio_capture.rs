@@ -10,6 +10,13 @@ use super::audio_const::AUDIO_CAPTURE_PIPELINE_NAME;
 use crate::utils::gstreamer_utils::{pull_sample, read_bus};
 use crate::utils::shutdown;
 
+/// Starts the audio capturer by creating the pipeline and sending the audio frames throug the provided Sender.
+///
+/// # Arguments
+///
+/// * `tx_audio` - `A Sender<Vec<u8>>` used to send audio frames.
+/// * `shutdown` - Used for graceful shutdown.
+/// * `barrier` - A used for synchronization.
 pub async fn start_audio_capture(
     tx_audio: Sender<Vec<u8>>,
     shutdown: shutdown::Shutdown,
@@ -17,7 +24,6 @@ pub async fn start_audio_capture(
 ) {
     shutdown.add_task().await;
 
-    // Initialize GStreamer
     if let Err(e) = gstreamer::init() {
         log::error!(
             "AUDIO CAPTURE | Error initializing GStreamer: {}",
@@ -71,6 +77,12 @@ pub async fn start_audio_capture(
         .expect("Unable to set the pipeline to the `Null` state");
 }
 
+/// Creates GStreamer elements required for audio capture pipeline.
+///
+/// # Returns
+/// A Result containing:
+/// * A `HashMap` of Gstreamer elements in case of success.
+/// * A `glib::BoolError` in case of error
 fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
 
@@ -111,6 +123,18 @@ fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> 
     Ok(elements)
 }
 
+/// Creates a GStreamer pipeline used for audio capture.
+///
+/// # Arguments
+///
+/// * `tx_audio` - A `Sender<Vec<u8>>` used to send audio frames.
+/// * `elements` - A HashMap containing the GStreamer elements required for the pipeline.
+/// * `caps` - The capabilities of the audio data to be captured.
+///
+/// # Returns
+/// A Result containing:
+/// * The constructed GStreamer pipeline in case of success.
+/// * A `stdio::Error` in case of error.
 fn create_pipeline(
     tx_audio: Sender<Vec<u8>>,
     elements: HashMap<&str, Element>,
@@ -152,7 +176,6 @@ fn create_pipeline(
     // Otra opcion podria ser: pay (pad probe) fakesink
     sink.set_callbacks(
         gstreamer_app::AppSinkCallbacks::builder()
-            // Add a handler to the "new-sample" signal.
             .new_sample(
                 move |appsink| match pull_sample(appsink, tx_audio.clone()) {
                     Ok(_) => Ok(gstreamer::FlowSuccess::Ok),

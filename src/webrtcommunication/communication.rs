@@ -137,6 +137,13 @@ impl Communication {
     }
 }
 
+/// Creates the API object used for WebRTC communication.
+/// 
+/// Register codecs used for audio and video, and set up default interceptros.
+/// 
+/// # Returns
+/// A Result containing the configured WebRTC API on success. Otherwise
+/// error is returned
 fn create_api() -> Result<API, Error> {
     let mut m = MediaEngine::default();
     if let Err(_val) = m.register_codec(
@@ -210,6 +217,11 @@ fn decode(s: &str) -> Result<String, Error> {
     }
 }
 
+/// Encodes a string to base64
+/// # Arguments
+/// * `b` - The string to be encoded
+/// # Returns
+/// * Result<String, Error> - The encoded string
 pub fn encode(b: &str) -> String {
     BASE64_STANDARD.encode(b)
 }

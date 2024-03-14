@@ -126,6 +126,16 @@ impl Latency {
     }
 }
 
+/// Creates a UDP socket binded to the specified address with a read timeout.
+///
+/// # Arguments
+///
+/// * `address` - A string representing the address to bind the socket to.
+/// * `timeout` - The duration of the read timeout for the socket.
+///
+/// # Returns
+///
+/// A Result containing the created UDP socket on success. Otherwhise an Error is returned.
 fn create_socket(address: &str, timeout: Duration) -> Result<UdpSocket, Error> {
     let socket = UdpSocket::bind(address)?;
     match socket.set_read_timeout(Some(timeout)) {
@@ -134,6 +144,16 @@ fn create_socket(address: &str, timeout: Duration) -> Result<UdpSocket, Error> {
     }
 }
 
+/// Calculates the latency.
+/// 
+/// # Arguments
+///
+/// * `socket` - A UDP socket used for communication with the SNTP server.
+///
+/// # Returns
+///
+/// A [`Result`] containing the calculated latency in milliseconds on success.
+/// On failure, returns an [`Error`] indicating the cause of the error.
 fn get_time(socket: UdpSocket) -> Result<u32, Error> {
     let result = get_time_from_sntp(socket)?;
 
@@ -178,6 +198,16 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
     )
 }
 
+/// Gets time from the SNTP server.
+/// 
+/// # Arguments
+///
+/// * `socket` - A UDP socket used for communication with the SNTP server.
+///
+/// # Returns
+///
+/// A `Result` containing the `NtpResult`.
+/// On failure, returns an `Error` indicating the cause of the error.
 fn get_time_from_sntp(socket: UdpSocket) -> Result<NtpResult, Error> {
     let mut retry = 0;
     let mut result: NtpResult = NtpResult::new(0, 0, 0, 0, 0, 0);

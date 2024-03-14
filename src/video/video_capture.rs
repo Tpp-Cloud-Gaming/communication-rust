@@ -16,6 +16,13 @@ use crate::utils::{
 
 use super::video_const::{ENCODER_BITRATE, GSTREAMER_FRAMES, VIDEO_CAPTURE_PIPELINE_NAME};
 
+/// Starts the video capturer by creating the pipeline and sending the video frames throug the provided Sender.
+///
+/// # Arguments
+///
+/// * `tx_video` - `A Sender<Vec<u8>>` used to send video frames.
+/// * `shutdown` - Used for graceful shutdown.
+/// * `barrier` - A used for synchronization.
 pub async fn start_video_capture(
     tx_video: Sender<Vec<u8>>,
     shutdown: shutdown::Shutdown,
@@ -123,6 +130,12 @@ pub async fn start_video_capture(
     }
 }
 
+/// Creates GStreamer elements required for the video capture pipeline.
+///
+/// # Returns
+///  A Result containing:
+/// * A `HashMap` of Gstreamer elements in case of success.
+/// * A `glib::BoolError` in case of error
 fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
     // Create the elements
@@ -152,7 +165,7 @@ fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Element>,
             .property("low-latency", true)
             .property(
                 "bitrate",
-                <gstreamer::glib::Value as From<u32>>::from(ENCODER_BITRATE),
+                <gstreamer::glib::Value as From<u32>>::from(3000),
             )
             .build()?
     };
@@ -169,6 +182,17 @@ fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Element>,
     Ok(elements)
 }
 
+/// Creates a GStreamer pipeline used for video capture.
+///
+/// # Arguments
+///
+/// * `tx_video` - A `Sender<Vec<u8>>` used to send audio frames.
+/// * `elements` - A HashMap containing the GStreamer elements required for the pipeline.
+/// * `caps` - The capabilities of the audio data to be captured.
+///
+/// # Returns
+///  A Result containing the constructed GStreamer pipeline in case of success. Otherwise
+/// error is returned.
 fn create_pipeline(
     elements: HashMap<&str, Element>,
     tx_video: Sender<Vec<u8>>,

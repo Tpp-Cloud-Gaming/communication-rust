@@ -13,6 +13,12 @@ use crate::utils::{
 
 use super::audio_const::AUDIO_PLAYER_PIPELINE_NAME;
 
+/// Starts the audio player by creating the pipeline and reading the audio frames from the provided Receiver.
+///
+/// # Arguments
+///
+/// * `rx_video` - A `Receiver<Vec<u8>>` for receiving video frames.
+/// * `shutdown` - A shutdown handle for managing the finalization of the thread.
 pub async fn start_audio_player(rx_audio: Receiver<Vec<u8>>, shutdown: shutdown::Shutdown) {
     // Initialize GStreamer
     if let Err(e) = gstreamer::init() {
@@ -75,6 +81,11 @@ pub async fn start_audio_player(rx_audio: Receiver<Vec<u8>>, shutdown: shutdown:
         .expect("Unable to set the pipeline to the `Null` state");
 }
 
+/// Creates the elements for the audio player pipeline.
+///
+/// # Returns
+///
+/// A Result containing a HashMap with the elements if the operation was successful, otherwise an Error is returned.
 fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
 
@@ -112,6 +123,17 @@ fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> 
     Ok(elements)
 }
 
+/// Creates the pipeline for the audio player.
+///
+/// # Arguments
+///
+/// * `elements` - A HashMap containing the elements for the pipeline.
+/// * `caps` - The Caps for the pipeline.
+/// * `rx_audio` - A `Receiver<Vec<u8>>` for receiving video frames.
+///
+/// # Returns
+///
+/// A Result containing the pipeline if the operation was successful, otherwise an Error is returned.
 fn create_pipeline(
     elements: HashMap<&str, Element>,
     rx_audio: Receiver<Vec<u8>>,

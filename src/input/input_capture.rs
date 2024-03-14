@@ -116,21 +116,8 @@ async fn start_handler(
                 action: Action::Press,
                 scan_code,
             } => {
-                let button_channel_cpy = button_channel.clone();                
-               
-                
-                let mut key = "".to_string();
-                if scan_code == 42 {
-                    key = "160".to_string();
-                } else if scan_code == 54 {
-                    key = "161".to_string();
-                } else {
-                    key = vk.into_u8().to_string();
-                }
-                
-                
-                
-                
+                let button_channel_cpy = button_channel.clone();                               
+                let key = vk.into_u8().to_string();
                 match handle_button_action(
                     button_channel_cpy,
                     PRESS_KEYBOARD_ACTION,
@@ -144,22 +131,10 @@ async fn start_handler(
             message_loop::Event::Keyboard {
                 vk,
                 action: Action::Release,
-                scan_code,
+                scan_code:_,
             } => {
                 let button_channel_cpy = button_channel.clone();                
-               // let key = vk.into_u8().to_string();
-
-                let mut key = "".to_string();
-                if scan_code == 42 {
-                    key = "160".to_string();
-                } else if scan_code == 54 {
-                    key = "161".to_string();
-                } else {
-                    key = vk.into_u8().to_string();
-                }
-               
-
-
+                let key = vk.into_u8().to_string();
                 match handle_button_action(
                     button_channel_cpy,
                     RELEASE_KEYBOARD_ACTION,

@@ -6,7 +6,6 @@ use webrtc::data_channel::RTCDataChannel;
 use winapi::um::winuser::*;
 use winput::Button;
 
-
 /// # ButtonController
 ///
 /// The `ButtonController` struct provides functionality for handling keyboard and mouse events
@@ -30,7 +29,13 @@ impl ButtonController {
             Box::pin(async move {
                 let s = String::from_utf8_lossy(&msg.data);
                 let (action, rest) = s.split_at(1);
-                let key = rest.parse::<u8>().unwrap();
+                let key = match rest.parse::<u8>() {
+                    Ok(k) => k,
+                    Err(e) => {
+                        log::error!("BUTTON CONTROLLER | Error parsing u8: {}", e);
+                        return;
+                    }
+                };
 
                 match action {
                     PRESS_KEYBOARD_ACTION => {
@@ -65,7 +70,6 @@ fn get_mouse_button(key: u8) -> Button {
         _ => Button::Left, //TODO: fix this
     }
 }
-
 
 /// Sends a keyboard input event.
 ///

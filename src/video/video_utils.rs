@@ -12,9 +12,22 @@ pub unsafe extern "system" fn _enumerate_callback(hwnd: HWND, lparam: LPARAM) ->
     GetWindowTextW(hwnd, window_text.as_mut_ptr(), 256);
 
     // Convert window text and class name to Rust strings
-    let binding = String::from_utf16(&window_text).unwrap();
+    let binding = match String::from_utf16(&window_text){
+        Ok(s) => s,
+        Err(e) => log::error!(
+            "VIDEO UTILS | Error converting window text to string: {}",
+            e.message()
+        ),
+    };
     let window_text_as_str = binding.trim_matches(char::from(0));
-    let binding = String::from_utf16(&class_name).unwrap();
+    
+    let binding = match String::from_utf16(&class_name){
+        Ok(s) => s,
+        Err(e) => log::error!(
+            "VIDEO UTILS | Error converting class name to string: {}",
+            e.message()
+        )
+    };
     let class_name_as_str = binding.trim_matches(char::from(0));
 
     //let a = &lparam as *mut Vec<isize>;

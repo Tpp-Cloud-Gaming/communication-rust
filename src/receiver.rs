@@ -42,13 +42,22 @@ async fn main() -> Result<(), Error> {
     let shutdown_cpy = shutdown.clone();
     let pc_cpy = peer_connection.clone();
     //TODO: Retornar errores ?
+    let shutdown_cpy1 = shutdown.clone();
+    
     tokio::spawn(async move {
-        InputCapture::new(pc_cpy, shutdown_cpy)
-            .await
-            .unwrap()
-            .start()
-            .await
-            .unwrap();
+        match InputCapture::new(pc_cpy, shutdown_cpy).await {
+            Ok(input_capture) => match input_capture.start().await {
+                Ok(_) => {}
+                Err(e) => {
+                    log::error!("Failed to start InputCapture: {}", e);
+                    shutdown_cpy1.notify_error(false).await;
+                }
+            },
+            Err(e) => {
+                log::error!("Failed to create InputCapture: {}", e);
+                shutdown_cpy1.notify_error(false).await;
+            }
+        }
     });
 
     // Create video frame channels
@@ -223,7 +232,14 @@ async fn read_audio_track(
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
                     let value = rtp_packet.payload.to_vec();
-                    tx.send(value).unwrap();
+                    match tx.send(value){
+                        Ok(_) => {}
+                        Err(e) => {
+                            log::error!("RECEIVER | Error sending audio packet to channel: {e}");
+                            shutdown.notify_error(false).await;
+                            return Err(Error::new(ErrorKind::Other, "Error sending audio packet to channel"));
+                        }
+                    }
 
                 }else if error_tracker.increment_with_error(){
                         log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
@@ -260,7 +276,15 @@ async fn read_video_track(
             result = track.read(&mut buff) => {
                 if let Ok((_rtp_packet, _)) = result {
 
-                    tx.send(buff.to_vec()).unwrap();
+                    match tx.send(buff.to_vec()){
+                        Ok(_) => {}
+                        Err(e) => {
+                            log::error!("RECEIVER | Error sending video packet to channel: {e}");
+                            shutdown.notify_error(false).await;
+                            return Err(Error::new(ErrorKind::Other, "Error sending video packet to channel"));
+                        }
+
+                    };
 
                 }else if error_tracker.increment_with_error(){
                         log::error!("RECEIVER | Max Attemps | Error reading RTP packet");

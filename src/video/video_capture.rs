@@ -1,26 +1,17 @@
-use gstreamer::{element_error, glib, prelude::*, Element, Pipeline};
+use gstreamer::{glib, prelude::*, Element, Pipeline};
+
 use std::{
     collections::HashMap,
     io::{self, Error},
     sync::Arc,
 };
-use tokio::{runtime::Runtime, sync::Barrier};
-use tokio::sync::mpsc::Sender;
-use winapi::{
-    shared::{
-        minwindef::{BOOL, LPARAM, TRUE},
-        windef::HWND,
-    },
-    um::winuser::{
-        GetClassNameW, GetWindowTextW, IsWindowEnabled, IsWindowVisible,
-    },
-};
 
-use crate::utils::{gstreamer_utils::read_bus, shutdown};
+use tokio::sync::mpsc::Sender;
+use tokio::sync::Barrier;
+
+use crate::utils::{gstreamer_utils::{handle_sample, read_bus}, shutdown};
 
 use super::video_const::{ENCODER_BITRATE, GSTREAMER_FRAMES, VIDEO_CAPTURE_PIPELINE_NAME};
-
-
 
 pub async fn start_video_capture(
     tx_video: Sender<Vec<u8>>,
@@ -209,50 +200,18 @@ fn create_pipeline(
         return Err(Error::new(io::ErrorKind::Other, e.to_string()));
     };
 
-    //TODO: modularizar y handlear errores
     sink.set_callbacks(
         gstreamer_app::AppSinkCallbacks::builder()
-            // Add a handler to the "new-sample" signal.
             .new_sample(move |appsink| {
-                // Pull the sample in question out of the appsink's buffer.
-                let sample = appsink.pull_sample().unwrap();
-
-                let buffer = sample.buffer().ok_or_else(|| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to get buffer from appsink")
-                    );
-
-                    gstreamer::FlowError::Error
-                })?;
-
-                let map = buffer.map_readable().map_err(|_| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to map buffer readable")
-                    );
-
-                    gstreamer::FlowError::Error
-                })?;
-
-                let samples = map.as_slice();
-                let rt = Runtime::new().unwrap();
-                rt.block_on(async {
-                    tx_video
-                        .send(samples.to_vec())
-                        .await
-                        .expect("Error sending audio sample");
-                });
-
-                
-
-                Ok(gstreamer::FlowSuccess::Ok)
+                match handle_sample(appsink, tx_video.clone()) {
+                    Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
+                    Err(err) => {
+                        log::error!("VIDEO CAPTURE | {}", err);
+                        Err(gstreamer::FlowError::Error)
+                    },
+                }
             })
             .build(),
     );
     Ok(pipeline)
 }
-
-

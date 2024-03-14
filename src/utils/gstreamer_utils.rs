@@ -1,5 +1,12 @@
-use gstreamer::{prelude::*, Pipeline};
 use crate::utils::shutdown::{self};
+use gstreamer::{element_error, ffi::gst_element_iterate_pads, prelude::*, Pipeline};
+use gstreamer_app::AppSink;
+use std::{
+    collections::HashMap,
+    io::{self, Error},
+    sync::Arc,
+};
+use tokio::{runtime::Runtime, sync::mpsc::Sender};
 
 pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
     // Wait until error or EOS
@@ -43,4 +50,30 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
             _ => (),
         }
     }
+}
+
+pub fn handle_sample(appsink: &AppSink, tx_video: Sender<Vec<u8>>) -> Result<(), Error> {
+    // Pull the sample in question out of the appsink's buffer.
+    let sample = appsink.pull_sample().unwrap();
+
+    let buffer = sample
+        .buffer()
+        .ok_or_else(|| Error::new(io::ErrorKind::Other, "Error pulling sample"))?;
+
+    let map = buffer
+        .map_readable()
+        .map_err(|_| Error::new(io::ErrorKind::Other, "Error reading buffer"))?;
+
+    let samples = map.as_slice();
+    let rt =
+        Runtime::new().map_err(|_| Error::new(io::ErrorKind::Other, "Error creating Runtime"))?;
+
+    rt.block_on(async {
+        match tx_video.send(samples.to_vec()).await {
+            Ok(result) => result,
+            Err(_) => log::error!("APPSINK | Error sending sample"),
+        };
+    });
+
+    Ok(())
 }

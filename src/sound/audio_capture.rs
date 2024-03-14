@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use gstreamer::{element_error, glib, prelude::*, Caps, Element, Pipeline};
 use tokio::runtime::Runtime;
-use tokio::sync::Barrier;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::Barrier;
 
+use super::audio_const::AUDIO_CAPTURE_PIPELINE_NAME;
 use crate::utils::gstreamer_utils::read_bus;
 use crate::utils::shutdown;
-use super::audio_const::AUDIO_CAPTURE_PIPELINE_NAME;
 
 pub async fn start_audio_capture(
     tx_audio: Sender<Vec<u8>>,
@@ -196,13 +196,11 @@ fn create_pipeline(
                     gstreamer::FlowError::Error
                 })?;
                 rt.block_on(async {
-                    
                     tx_audio
                         .send(samples.to_vec())
                         .await
                         .expect("Error sending audio sample");
                 });
-
 
                 Ok(gstreamer::FlowSuccess::Ok)
             })

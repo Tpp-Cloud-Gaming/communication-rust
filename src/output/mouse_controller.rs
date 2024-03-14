@@ -18,7 +18,7 @@ impl MouseController {
     pub fn new() -> MouseController {
         MouseController {}
     }
-    
+
     /// Starts the mouse controller by registering a callback for incoming messages on the
     /// provided WebRTC data channel.
     ///

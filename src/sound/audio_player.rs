@@ -167,4 +167,3 @@ fn create_pipeline(
     );
     Ok(pipeline)
 }
-

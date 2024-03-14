@@ -7,11 +7,10 @@ use crate::utils::{gstreamer_utils::read_bus, shutdown};
 
 use super::video_const::VIDEO_PLAYER_PIPELINE_NAME;
 
-
 /// Starts the video player by creating the pipeline and reading the video frames from the provided Receiver.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `rx_video` - A Receiver for receiving video frames.
 /// * `shutdown` - A shutdown handle for managing the finalization of the thread.
 pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown: shutdown::Shutdown) {
@@ -70,11 +69,10 @@ pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown: shutdown:
     }
 }
 
-
 /// Creates the elements for the video player pipeline.
-/// 
+///
 /// # Returns
-/// 
+///
 /// A Result containing a HashMap with the elements if the operation was successful, otherwise an Error is returned.
 fn create_elements() -> Result<HashMap<&'static str, Element>, Error> {
     let mut elements = HashMap::new();
@@ -111,15 +109,15 @@ fn create_elements() -> Result<HashMap<&'static str, Element>, Error> {
 }
 
 /// Creates the pipeline for the video player.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `elements` - A HashMap containing the elements for the pipeline.
 /// * `caps` - The Caps for the pipeline.
 /// * `rx_video` - A Receiver for receiving video frames.
-/// 
+///
 /// # Returns
-/// 
+///
 /// A Result containing the pipeline if the operation was successful, otherwise an Error is returned.
 fn create_pipeline(
     elements: HashMap<&str, Element>,
@@ -188,4 +186,3 @@ fn create_pipeline(
 
     Ok(pipeline)
 }
-

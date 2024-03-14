@@ -9,9 +9,9 @@ use std::io::{Error, ErrorKind};
 //use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Barrier;
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
+use tokio::sync::Barrier;
 
 use crate::utils::shutdown::Shutdown;
 use crate::video::video_capture::start_video_capture;
@@ -51,7 +51,6 @@ async fn main() -> Result<(), Error> {
     //Create audio frames channels
     //let (tx_audio, rx_audio): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
     let (tx_audio, rx_audio) = channel(100);
-    
 
     // Create video frame channels
     //let (tx_video, rx_video): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
@@ -311,10 +310,7 @@ async fn start_audio_sending(
             }
             None => {
                 if error_tracker.increment_with_error() {
-                    log::error!(
-                        "SENDER | Max attemps | Error receiving audio data | ",
-                        
-                    );
+                    log::error!("SENDER | Max attemps | Error receiving audio data | ",);
                     shutdown.notify_error(false).await;
                     return;
                 } else {
@@ -375,10 +371,7 @@ async fn start_video_sending(
             }
             None => {
                 if error_tracker.increment_with_error() {
-                    log::error!(
-                        "SENDER | Max attemps | Error receiving video data |",
-                
-                    );
+                    log::error!("SENDER | Max attemps | Error receiving video data |",);
                     shutdown.notify_error(false).await;
                     return;
                 } else {

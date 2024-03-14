@@ -20,7 +20,7 @@ pub struct InputCapture {
 }
 
 impl InputCapture {
-        /// Creates a new `InputCapture`.
+    /// Creates a new `InputCapture`.
     ///
     /// # Arguments
     ///
@@ -87,16 +87,16 @@ impl InputCapture {
 }
 
 /// Starts the input handler by listening for input events and sending them through the data channels.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `receiver` - An EventReceiver for listening to input events.
 /// * `button_channel` - An Arc reference to the RTCDataChannel for the keyboard.
 /// * `mouse_channel` - An Arc reference to the RTCDataChannel for the mouse.
 /// * `shutdown` - A shutdown handle for managing the finalization of the thread.
-/// 
+///
 /// # Returns
-/// 
+///
 /// A Result containing () if the operation was successful, otherwise an Error is returned.
 async fn start_handler(
     receiver: EventReceiver,
@@ -116,14 +116,16 @@ async fn start_handler(
                 action: Action::Press,
                 scan_code,
             } => {
-                let button_channel_cpy = button_channel.clone();                               
+                let button_channel_cpy = button_channel.clone();
                 let key = vk.into_u8().to_string();
                 match handle_button_action(
                     button_channel_cpy,
                     PRESS_KEYBOARD_ACTION,
                     key,
                     shutdown_cpy_loop.clone(),
-                ).await {
+                )
+                .await
+                {
                     Ok(_) => (),
                     Err(e) => eprintln!("Failed to handle button action: {}", e),
                 }
@@ -131,9 +133,9 @@ async fn start_handler(
             message_loop::Event::Keyboard {
                 vk,
                 action: Action::Release,
-                scan_code:_,
+                scan_code: _,
             } => {
-                let button_channel_cpy = button_channel.clone();                
+                let button_channel_cpy = button_channel.clone();
                 let key = vk.into_u8().to_string();
                 match handle_button_action(
                     button_channel_cpy,
@@ -141,7 +143,8 @@ async fn start_handler(
                     key,
                     shutdown_cpy_loop.clone(),
                 )
-                .await{
+                .await
+                {
                     Ok(_) => (),
                     Err(e) => eprintln!("Failed to handle button action: {}", e),
                 }
@@ -150,14 +153,15 @@ async fn start_handler(
                 action: Action::Press,
                 button,
             } => {
-                let button_channel_cpy = button_channel.clone();                
+                let button_channel_cpy = button_channel.clone();
                 match handle_button_action(
                     button_channel_cpy,
                     PRESS_MOUSE_ACTION,
                     button_to_i32(button).to_string(),
                     shutdown_cpy_loop.clone(),
                 )
-                .await {
+                .await
+                {
                     Ok(_) => (),
                     Err(e) => eprintln!("Failed to handle button action: {}", e),
                 }
@@ -167,14 +171,15 @@ async fn start_handler(
                 button,
             } => {
                 let button_channel_cpy = button_channel.clone();
-                
+
                 match handle_button_action(
                     button_channel_cpy,
                     RELEASE_MOUSE_ACTION,
                     button_to_i32(button).to_string(),
                     shutdown_cpy_loop.clone(),
                 )
-                .await {
+                .await
+                {
                     Ok(_) => (),
                     Err(e) => eprintln!("Failed to handle button action: {}", e),
                 }
@@ -187,8 +192,11 @@ async fn start_handler(
                     == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
                 {
                     let mouse_channel_cpy = mouse_channel.clone();
-                    tokio::task::spawn(async move {                        
-                        match mouse_channel_cpy.send_text(std::format!("{} {}", x, y).as_str()).await {
+                    tokio::task::spawn(async move {
+                        match mouse_channel_cpy
+                            .send_text(std::format!("{} {}", x, y).as_str())
+                            .await
+                        {
                             Ok(_) => (),
                             Err(e) => eprintln!("Failed to send mouse event: {}", e),
                         }
@@ -204,18 +212,17 @@ async fn start_handler(
     }
 }
 
-
 /// Handles the button action by sending the corresponding message through the data channel.
-/// 
+///
 /// # Arguments
 ///     
 /// * `button_channel` - An Arc reference to the RTCDataChannel.
 /// * `action` - A string slice representing the action to be performed.
 /// * `text` - A string representing the text to be sent.
 /// * `shutdown` - A shutdown handle for managing the finalization of the thread.
-/// 
+///
 /// # Returns
-/// 
+///
 /// A Result containing () if the operation was successful, otherwise an Error is returned.
 async fn handle_button_action(
     button_channel: Arc<RTCDataChannel>,
@@ -240,15 +247,14 @@ async fn handle_button_action(
     Ok(())
 }
 
-
 /// Maps the mouse button to the corresponding integer value.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `button` - A Button value.
-/// 
+///
 /// # Returns
-/// 
+///
 /// An integer value corresponding to the button.
 fn button_to_i32(button: Button) -> i32 {
     match button {

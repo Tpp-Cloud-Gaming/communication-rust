@@ -2,7 +2,7 @@ pub const ENCODE_BUFFER_SIZE: usize = 960;
 
 pub const STREAM_TRACK_ID: &str = "webrtc-rs";
 pub const STUN_ADRESS: &str = "stun:stun.l.google.com:19302";
-pub const TURN_ADRESS: &str = "turn:ec2-54-207-200-111.sa-east-1.compute.amazonaws.com";
+pub const TURN_ADRESS: &str = "turn:ec2-18-229-125-112.sa-east-1.compute.amazonaws.com";
 //TODO: ocultar credenciales
 pub const TURN_USER: &str = "username1";
 pub const TURN_PASS: &str = "key1";

@@ -120,7 +120,7 @@ async fn start_handler(
                 let key = vk.into_u8().to_string();
                 match handle_button_action(
                     button_channel_cpy,
-                    RELEASE_KEYBOARD_ACTION,
+                    PRESS_KEYBOARD_ACTION,
                     key,
                     shutdown_cpy_loop.clone(),
                 ).await {

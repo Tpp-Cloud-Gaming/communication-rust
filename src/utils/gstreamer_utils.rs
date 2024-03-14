@@ -1,10 +1,9 @@
 use crate::utils::shutdown::{self};
-use gstreamer::{element_error, ffi::gst_element_iterate_pads, prelude::*, Pipeline};
-use gstreamer_app::AppSink;
+use gstreamer::{prelude::*, Pipeline};
+use gstreamer_app::{AppSink, AppSrc};
 use std::{
-    collections::HashMap,
     io::{self, Error},
-    sync::Arc,
+    sync::mpsc::Receiver,
 };
 use tokio::{runtime::Runtime, sync::mpsc::Sender};
 
@@ -52,13 +51,15 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
     }
 }
 
-pub fn handle_sample(appsink: &AppSink, tx_video: Sender<Vec<u8>>) -> Result<(), Error> {
+pub fn pull_sample(appsink: &AppSink, tx: Sender<Vec<u8>>) -> Result<(), Error> {
     // Pull the sample in question out of the appsink's buffer.
-    let sample = appsink.pull_sample().unwrap();
+    let sample = appsink
+        .pull_sample()
+        .map_err(|_| Error::new(io::ErrorKind::Other, "Error pulling sample from appsink"))?;
 
     let buffer = sample
         .buffer()
-        .ok_or_else(|| Error::new(io::ErrorKind::Other, "Error pulling sample"))?;
+        .ok_or_else(|| Error::new(io::ErrorKind::Other, "Error getting buffer"))?;
 
     let map = buffer
         .map_readable()
@@ -69,11 +70,25 @@ pub fn handle_sample(appsink: &AppSink, tx_video: Sender<Vec<u8>>) -> Result<(),
         Runtime::new().map_err(|_| Error::new(io::ErrorKind::Other, "Error creating Runtime"))?;
 
     rt.block_on(async {
-        match tx_video.send(samples.to_vec()).await {
+        match tx.send(samples.to_vec()).await {
             Ok(result) => result,
             Err(_) => log::error!("APPSINK | Error sending sample"),
         };
     });
+
+    Ok(())
+}
+
+pub fn push_sample(appsrc: &AppSrc, rx: &Receiver<Vec<u8>>) -> Result<(), Error> {
+    let frame = rx
+        .recv()
+        .map_err(|_| Error::new(io::ErrorKind::Other, "Error reading buffer"))?;
+
+    let buffer = gstreamer::Buffer::from_slice(frame);
+
+    appsrc
+        .push_buffer(buffer)
+        .map_err(|_| Error::new(io::ErrorKind::Other, "Error pushing buffer"))?;
 
     Ok(())
 }

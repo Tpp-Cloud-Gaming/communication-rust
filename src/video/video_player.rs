@@ -3,7 +3,10 @@ use std::{collections::HashMap, io::Error, sync::mpsc::Receiver};
 use gstreamer::{glib, prelude::*, Caps, Element};
 use winapi::um::winuser::ShowCursor;
 
-use crate::utils::{gstreamer_utils::read_bus, shutdown};
+use crate::utils::{
+    gstreamer_utils::{push_sample, read_bus},
+    shutdown,
+};
 
 use super::video_const::VIDEO_PLAYER_PIPELINE_NAME;
 
@@ -162,11 +165,11 @@ fn create_pipeline(
     source.set_callbacks(
         gstreamer_app::AppSrcCallbacks::builder()
             .need_data(move |appsrc, _| {
-                let frame = rx_video.recv().unwrap();
-
-                let buffer = gstreamer::Buffer::from_slice(frame);
-
-                appsrc.push_buffer(buffer).unwrap();
+                push_sample(appsrc, &rx_video)
+                    .map_err(|err| {
+                        log::error!("VIDEO PLAYER | {}", err);
+                    })
+                    .unwrap();
             })
             .build(),
     );

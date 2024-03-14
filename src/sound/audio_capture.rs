@@ -2,13 +2,12 @@ use std::collections::HashMap;
 use std::io::Error;
 use std::sync::Arc;
 
-use gstreamer::{element_error, glib, prelude::*, Caps, Element, Pipeline};
-use tokio::runtime::Runtime;
+use gstreamer::{glib, prelude::*, Caps, Element, Pipeline};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Barrier;
 
 use super::audio_const::AUDIO_CAPTURE_PIPELINE_NAME;
-use crate::utils::gstreamer_utils::read_bus;
+use crate::utils::gstreamer_utils::{pull_sample, read_bus};
 use crate::utils::shutdown;
 
 pub async fn start_audio_capture(
@@ -151,59 +150,18 @@ fn create_pipeline(
     }
 
     // Otra opcion podria ser: pay (pad probe) fakesink
-    //TODO: handleo de errores al igual que en video
     sink.set_callbacks(
         gstreamer_app::AppSinkCallbacks::builder()
             // Add a handler to the "new-sample" signal.
-            .new_sample(move |appsink| {
-                // Pull the sample in question out of the appsink's buffer.
-                let sample = appsink.pull_sample().map_err(|_| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to pull sample")
-                    );
-                    gstreamer::FlowError::Error
-                })?;
-
-                let buffer = sample.buffer().ok_or_else(|| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to get buffer from appsink in audio pipeline")
-                    );
-                    gstreamer::FlowError::Error
-                })?;
-
-                let map = buffer.map_readable().map_err(|_| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to map buffer readable")
-                    );
-
-                    gstreamer::FlowError::Error
-                })?;
-
-                let samples = map.as_slice();
-
-                let rt = Runtime::new().map_err(|_| {
-                    element_error!(
-                        appsink,
-                        gstreamer::ResourceError::Failed,
-                        ("Failed to create runtime")
-                    );
-                    gstreamer::FlowError::Error
-                })?;
-                rt.block_on(async {
-                    tx_audio
-                        .send(samples.to_vec())
-                        .await
-                        .expect("Error sending audio sample");
-                });
-
-                Ok(gstreamer::FlowSuccess::Ok)
-            })
+            .new_sample(
+                move |appsink| match pull_sample(appsink, tx_audio.clone()) {
+                    Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
+                    Err(err) => {
+                        log::error!("AUDIO CAPTURE | {}", err);
+                        Err(gstreamer::FlowError::Error)
+                    }
+                },
+            )
             .build(),
     );
 

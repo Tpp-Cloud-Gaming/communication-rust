@@ -114,7 +114,7 @@ async fn start_handler(
             message_loop::Event::Keyboard {
                 vk,
                 action: Action::Press,
-                scan_code,
+                scan_code: _,
             } => {
                 let button_channel_cpy = button_channel.clone();
                 let key = vk.into_u8().to_string();

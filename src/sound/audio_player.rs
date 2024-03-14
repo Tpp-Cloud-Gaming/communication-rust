@@ -6,7 +6,10 @@ use std::{
 
 use gstreamer::{glib, prelude::*, Element, Pipeline};
 
-use crate::utils::{gstreamer_utils::read_bus, shutdown};
+use crate::utils::{
+    gstreamer_utils::{push_sample, read_bus},
+    shutdown,
+};
 
 use super::audio_const::AUDIO_PLAYER_PIPELINE_NAME;
 
@@ -145,23 +148,14 @@ fn create_pipeline(
         return Err(Error::new(ErrorKind::Other, e.to_string()));
     }
 
-    //TODO: handle error
     source.set_callbacks(
-        // Since our appsrc element operates in pull mode (it asks us to provide data),
-        // we add a handler for the need-data callback and provide new data from there.
-        // In our case, we told gstreamer that we do 2 frames per second. While the
-        // buffers of all elements of the pipeline are still empty, this will be called
-        // a couple of times until all of them are filled. After this initial period,
-        // this handler will be called (on average) twice per second.
         gstreamer_app::AppSrcCallbacks::builder()
             .need_data(move |appsrc, _| {
-                // appsrc already handles the error here
-
-                let frame = rx_audio.recv().unwrap();
-
-                let buffer = gstreamer::Buffer::from_slice(frame);
-
-                appsrc.push_buffer(buffer).unwrap();
+                push_sample(appsrc, &rx_audio)
+                    .map_err(|err| {
+                        log::error!("AUDIO PLAYER | {}", err);
+                    })
+                    .unwrap();
             })
             .build(),
     );

@@ -43,7 +43,7 @@ async fn main() -> Result<(), Error> {
     let pc_cpy = peer_connection.clone();
     //TODO: Retornar errores ?
     let shutdown_cpy1 = shutdown.clone();
-    
+
     tokio::spawn(async move {
         match InputCapture::new(pc_cpy, shutdown_cpy).await {
             Ok(input_capture) => match input_capture.start().await {

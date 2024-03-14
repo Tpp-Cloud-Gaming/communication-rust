@@ -9,7 +9,10 @@ use std::{
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Barrier;
 
-use crate::utils::{gstreamer_utils::{handle_sample, read_bus}, shutdown};
+use crate::utils::{
+    gstreamer_utils::{pull_sample, read_bus},
+    shutdown,
+};
 
 use super::video_const::{ENCODER_BITRATE, GSTREAMER_FRAMES, VIDEO_CAPTURE_PIPELINE_NAME};
 
@@ -56,7 +59,7 @@ pub async fn start_video_capture(
     //     }
     // };
 
-    //let selected = hwnds.get(number).unwrap();
+    //let selected = hwnds.get(number);
     let window_handle = 0_u64;
     //println!("You selected: {}", selected.2);
 
@@ -202,15 +205,15 @@ fn create_pipeline(
 
     sink.set_callbacks(
         gstreamer_app::AppSinkCallbacks::builder()
-            .new_sample(move |appsink| {
-                match handle_sample(appsink, tx_video.clone()) {
+            .new_sample(
+                move |appsink| match pull_sample(appsink, tx_video.clone()) {
                     Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
                     Err(err) => {
                         log::error!("VIDEO CAPTURE | {}", err);
                         Err(gstreamer::FlowError::Error)
-                    },
-                }
-            })
+                    }
+                },
+            )
             .build(),
     );
     Ok(pipeline)

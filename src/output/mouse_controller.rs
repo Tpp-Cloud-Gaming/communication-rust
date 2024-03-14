@@ -37,8 +37,20 @@ impl MouseController {
                 let parts: Vec<&str> = s.split_whitespace().collect();
 
                 // Parse the parts into integers
-                let x = parts[0].parse::<i32>().unwrap();
-                let y = parts[1].parse::<i32>().unwrap();
+                let x = match parts[0].parse::<i32>() {
+                    Ok(x) => x,
+                    Err(e) => {
+                        log::error!("MOUSE CONTROLLER | Error parsing i32: {}", e);
+                        return;
+                    }
+                };
+                let y = match parts[1].parse::<i32>() {
+                    Ok(y) => y,
+                    Err(e) => {
+                        log::error!("MOUSE CONTROLLER | Error parsing i32: {}", e);
+                        return;
+                    }
+                };
 
                 thread::sleep(std::time::Duration::from_micros(MOUSE_DELAY));
                 Mouse::move_relative(x, y);

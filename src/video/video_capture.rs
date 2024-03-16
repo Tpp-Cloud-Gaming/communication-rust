@@ -22,7 +22,7 @@ use super::video_const::{ENCODER_BITRATE, GSTREAMER_FRAMES, VIDEO_CAPTURE_PIPELI
 ///
 /// * `tx_video` - `A Sender<Vec<u8>>` used to send video frames.
 /// * `shutdown` - Used for graceful shutdown.
-/// * `barrier` - A used for synchronization.
+/// * `barrier` - Used for synchronization.
 pub async fn start_video_capture(
     tx_video: Sender<Vec<u8>>,
     shutdown: shutdown::Shutdown,
@@ -163,10 +163,7 @@ fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Element>,
         gstreamer::ElementFactory::make("mfh264enc")
             .name("mfh264enc")
             .property("low-latency", true)
-            .property(
-                "bitrate",
-                <gstreamer::glib::Value as From<u32>>::from(3000),
-            )
+            .property("bitrate", <gstreamer::glib::Value as From<u32>>::from(3000))
             .build()?
     };
 

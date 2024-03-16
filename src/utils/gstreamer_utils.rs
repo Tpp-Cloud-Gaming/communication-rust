@@ -10,7 +10,7 @@ use tokio::{runtime::Runtime, sync::mpsc::Sender};
 /// Reads the pipeline bus and prints the pipeline status.
 ///
 /// # Arguments
-/// 
+///
 /// * `pipeline` - A gstreamer pipeline
 /// * `shutdown` - A shutdown handle used for graceful shutdown
 pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
@@ -60,10 +60,10 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
 /// Pulls sample from AppSink buffer and sends it as `Vec<u8>` through a specified channel.
 ///
 /// # Arguments
-/// 
+///
 /// * `appsink` - A gstreamer `AppSink` element.
 /// * `tx` - A `Sender<Vec<u8>>` used to send AppSink samples.
-/// 
+///
 /// # Return
 /// Result containing `Ok(())` on success. Error on error.
 pub fn pull_sample(appsink: &AppSink, tx: Sender<Vec<u8>>) -> Result<(), Error> {
@@ -94,14 +94,13 @@ pub fn pull_sample(appsink: &AppSink, tx: Sender<Vec<u8>>) -> Result<(), Error> 
     Ok(())
 }
 
-
 /// Pushes a sample received through a channel into an `AppSrc`.
 ///
 /// # Arguments
-/// 
+///
 /// * `appsink` - A reference to the `AppSrc` gstreamer element.
 /// * `rx` - A `Receiver<Vec<u8>>` for receiving the sample data.
-/// 
+///
 /// # Return
 /// Result containing `Ok(())` on success. Error on error.
 pub fn push_sample(appsrc: &AppSrc, rx: &Receiver<Vec<u8>>) -> Result<(), Error> {

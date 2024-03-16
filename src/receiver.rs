@@ -154,6 +154,14 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
+/// Sets on track event for the provided connection
+///
+/// # Arguments
+///
+/// * `peer_connection` - A RTCPeerConnection.
+/// * `tx_audio` - A channel to configure in case it is an audio track.
+/// * `tx_audio` - A channel to configure in case it is a video track.
+/// * `shutdown` -  Used for graceful shutdown.
 fn set_on_track_handler(
     peer_connection: &Arc<RTCPeerConnection>,
     tx_audio: mpsc::Sender<Vec<u8>>,
@@ -183,7 +191,7 @@ fn set_on_track_handler(
             return Box::pin(async move {
                 println!("RECEIVER | Got H264 Track");
                 tokio::spawn(async move {
-                    let _ = read_video_track(track, shutdown_cpy, &tx_video_cpy).await;
+                    let _ = read_video_track(track, &tx_video_cpy, shutdown_cpy).await;
                 });
             });
         };
@@ -192,33 +200,16 @@ fn set_on_track_handler(
     }));
 }
 
-//Esta funcion solo sirve para que detecte si algun on ice pasa a connection state failed y ahi
-// mande un signal para que todo termine
-
-// Set the handler for ICE connection state
-// This will notify you when the peer has connected/disconnected
-// fn set_on_ice_connection_state_change_handler(
-//     peer_connection: &Arc<RTCPeerConnection>,
-//     _shutdown: shutdown::Shutdown,
-// ) {
-//     peer_connection.on_ice_connection_state_change(Box::new(
-//         move |connection_state: RTCIceConnectionState| {
-//             log::info!("RECEIVER | ICE Connection State has changed | {connection_state}");
-
-//             // if connection_state == RTCIceConnectionState::Connected {
-//             //     //let shutdown_cpy = shutdown.clone();
-//             // } else if connection_state == RTCIceConnectionState::Failed {
-//             //     TODO: ver que hacer en este escenario
-//             //     let shutdown_cpy = shutdown.clone();
-//             //     _ = Box::pin(async move {
-//             //         shutdown_cpy.notify_error(true).await;
-//             //     });
-//             // }
-//             Box::pin(async {})
-//         },
-//     ));
-// }
-
+/// Reads RTP Packets on the provided audio track and sends them to the channel provided
+///
+/// # Arguments
+///
+/// * `track` - Audio track from which to read rtp packets
+/// * `tx` - A channel to send the packets read
+/// * `shutdown` -  Used for graceful shutdown.
+///
+/// # Return
+/// Result containing `Ok(())` on success. Error on error.
 async fn read_audio_track(
     track: Arc<TrackRemote>,
     tx: &mpsc::Sender<Vec<u8>>,
@@ -261,10 +252,20 @@ async fn read_audio_track(
     }
 }
 
+/// Reads data on the provided audio track and sends it to the channel provided
+///
+/// # Arguments
+///
+/// * `track` - Video track from which to read data
+/// * `tx` - A channel to send the data read
+/// * `shutdown` -  Used for graceful shutdown.
+///
+/// # Return
+/// Result containing `Ok(())` on success. Error on error.
 async fn read_video_track(
     track: Arc<TrackRemote>,
-    shutdown: shutdown::Shutdown,
     tx: &mpsc::Sender<Vec<u8>>,
+    shutdown: shutdown::Shutdown,
 ) -> Result<(), Error> {
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
     shutdown.add_task().await;
@@ -304,9 +305,14 @@ async fn read_video_track(
             }
         }
     }
-    //Ok(())
 }
 
+/// Sets on data channel event for the given connection
+///
+/// # Arguments
+///
+/// * `peer_conection` - A RTCPeerConnection
+/// * `shutdown` -  Used for graceful shutdown.
 fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown::Shutdown) {
     // Register data channel creation handling
     peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
@@ -328,3 +334,30 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
         }
     }));
 }
+
+//Esta funcion solo sirve para que detecte si algun on ice pasa a connection state failed y ahi
+// mande un signal para que todo termine
+
+// Set the handler for ICE connection state
+// This will notify you when the peer has connected/disconnected
+// fn set_on_ice_connection_state_change_handler(
+//     peer_connection: &Arc<RTCPeerConnection>,
+//     _shutdown: shutdown::Shutdown,
+// ) {
+//     peer_connection.on_ice_connection_state_change(Box::new(
+//         move |connection_state: RTCIceConnectionState| {
+//             log::info!("RECEIVER | ICE Connection State has changed | {connection_state}");
+
+//             // if connection_state == RTCIceConnectionState::Connected {
+//             //     //let shutdown_cpy = shutdown.clone();
+//             // } else if connection_state == RTCIceConnectionState::Failed {
+//             //     TODO: ver que hacer en este escenario
+//             //     let shutdown_cpy = shutdown.clone();
+//             //     _ = Box::pin(async move {
+//             //         shutdown_cpy.notify_error(true).await;
+//             //     });
+//             // }
+//             Box::pin(async {})
+//         },
+//     ));
+// }

@@ -138,9 +138,9 @@ impl Communication {
 }
 
 /// Creates the API object used for WebRTC communication.
-/// 
+///
 /// Register codecs used for audio and video, and set up default interceptros.
-/// 
+///
 /// # Returns
 /// A Result containing the configured WebRTC API on success. Otherwise
 /// error is returned

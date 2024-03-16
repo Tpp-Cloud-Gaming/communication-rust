@@ -4,9 +4,8 @@ pub mod sound;
 pub mod utils;
 pub mod video;
 pub mod webrtcommunication;
+
 use std::io::{Error, ErrorKind};
-//use std::sync::mpsc;
-//use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
@@ -49,11 +48,9 @@ async fn main() -> Result<(), Error> {
     let barrier = Arc::new(Barrier::new(5));
 
     //Create audio frames channels
-    //let (tx_audio, rx_audio): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
     let (tx_audio, rx_audio) = channel(100);
 
     // Create video frame channels
-    //let (tx_video, rx_video): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = mpsc::channel();
     let (tx_video, rx_video) = channel(100);
 
     let comunication =
@@ -168,6 +165,17 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
+/// Creates a TrackLocalStaticSample and adds it to the provided peer connection
+///
+/// # Arguments
+///
+/// * `pc` - A RTCPeerConnection to add the track.
+/// * `shutdown` - Used for graceful shutdown.
+/// * `mime_type` - The mime type for the configuration of the track.
+/// * `track_id` - The id provided for the configuration of the track.
+///
+/// # Return
+/// Result containing `Ok((Arc<RTCRtpSender>, Arc<TrackLocalStaticSample>))` on success. Error on error.
 async fn create_track_sample(
     pc: Arc<RTCPeerConnection>,
     shutdown: shutdown::Shutdown,
@@ -197,6 +205,17 @@ async fn create_track_sample(
     }
 }
 
+/// Creates a TrackLocalStaticRTP and adds it to the provided peer connection
+///
+/// # Arguments
+///
+/// * `pc` - A RTCPeerConnection to add the track.
+/// * `shutdown` - Used for graceful shutdown.
+/// * `mime_type` - The mime type for the configuration of the track.
+/// * `track_id` - The id provided for the configuration of the track.
+///
+/// # Return
+/// Result containing `Ok((Arc<RTCRtpSender>, Arc<TrackLocalStaticRTP>))` on success. Error on error.
 async fn create_track_rtp(
     pc: Arc<RTCPeerConnection>,
     shutdown: shutdown::Shutdown,
@@ -226,6 +245,13 @@ async fn create_track_rtp(
     }
 }
 
+/// Sets the event handlers for ice connection/peer connection state change on the provided connection
+///
+/// # Arguments
+///
+/// * `pc` - A RTCPeerConnection.
+/// * `done_tx` - A channel to send the message if the peer connection fails.
+/// * `barrier` - Used for synchronization.
 fn set_peer_events(
     pc: &Arc<RTCPeerConnection>,
     done_tx: tokio::sync::mpsc::Sender<()>,
@@ -263,6 +289,15 @@ fn set_peer_events(
     }));
 }
 
+/// Checks the result provided and notifies the shutdown in case of error
+///
+/// # Arguments
+///
+/// * `result` - The result to check.
+/// * `shutdown` -  Used for graceful shutdown.
+///
+/// # Return
+/// The result provided as argument
 async fn check_error<T, E>(result: Result<T, E>, shutdown: &Shutdown) -> Result<T, E> {
     if result.is_err() {
         shutdown.notify_error(true).await;
@@ -270,9 +305,12 @@ async fn check_error<T, E>(result: Result<T, E>, shutdown: &Shutdown) -> Result<
     result
 }
 
-// Read incoming RTCP packets
-// Before these packets are returned they are processed by interceptors. For things
-// like NACK this needs to be called.
+/// Reads incoming rtcp packets
+///
+/// # Arguments
+///
+/// * `shutdown` -  Used for graceful shutdown.
+/// * `rtp_sender` -  RTCRtpSender from which to read messages.
 async fn read_rtcp(shutdown: shutdown::Shutdown, rtp_sender: Arc<RTCRtpSender>) {
     shutdown.add_task().await;
     let mut rtcp_buf = vec![0u8; 1500];
@@ -289,6 +327,14 @@ async fn read_rtcp(shutdown: shutdown::Shutdown, rtp_sender: Arc<RTCRtpSender>) 
     }
 }
 
+/// Receives audio samples and sends them
+///
+/// # Arguments
+///
+/// * `barrier_audio_send` - Used for synchronization.
+/// * `rx` - A channel to receive samples.
+/// * `audio_track` - Track to write the samples to.
+/// * `shutdown` -  Used for graceful shutdown.
 async fn start_audio_sending(
     barrier_audio_send: Arc<Barrier>,
     mut rx: Receiver<Vec<u8>>,
@@ -349,6 +395,14 @@ async fn start_audio_sending(
     }
 }
 
+/// Receives video samples and sends them
+///
+/// # Arguments
+///
+/// * `barrier_video_send` - Used for synchronization.
+/// * `rx` - A channel to receive samples.
+/// * `video_track` - Track to write the samples to.
+/// * `shutdown` -  Used for graceful shutdown.
 async fn start_video_sending(
     barrier_video_send: Arc<Barrier>,
     mut rx: Receiver<Vec<u8>>,
@@ -402,6 +456,12 @@ async fn start_video_sending(
     }
 }
 
+/// Sets on data channel event for the given connection
+///
+/// # Arguments
+///
+/// * `peer_conection` - A RTCPeerConnection
+/// * `shutdown` -  Used for graceful shutdown.
 fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, _shutdown: shutdown::Shutdown) {
     // Register data channel creation handling
     peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {

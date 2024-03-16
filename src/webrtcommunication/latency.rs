@@ -145,7 +145,7 @@ fn create_socket(address: &str, timeout: Duration) -> Result<UdpSocket, Error> {
 }
 
 /// Calculates the latency.
-/// 
+///
 /// # Arguments
 ///
 /// * `socket` - A UDP socket used for communication with the SNTP server.
@@ -199,7 +199,7 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
 }
 
 /// Gets time from the SNTP server.
-/// 
+///
 /// # Arguments
 ///
 /// * `socket` - A UDP socket used for communication with the SNTP server.

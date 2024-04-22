@@ -4,6 +4,7 @@ pub mod sound;
 pub mod utils;
 pub mod video;
 pub mod webrtcommunication;
+pub mod websocketprotocol;
 
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
@@ -38,9 +39,16 @@ use crate::utils::webrtc_const::{
     STREAM_TRACK_ID, STUN_ADRESS, VIDEO_TRACK_ID,
 };
 use crate::webrtcommunication::latency::Latency;
+use crate::websocketprotocol::websocketprotocol::WsProtocol;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    
+    
+    let mut ws = WsProtocol::WsProtocol().await?;
+    ws.init_offer("franco").await?;   
+    let client_name = ws.wait_for_game_solicitude().await?;
+    
     //Start log
     env_logger::builder().format_target(false).init();
     let shutdown = Shutdown::new();
@@ -129,6 +137,7 @@ async fn main() -> Result<(), Error> {
     if let Some(local_desc) = pc.local_description().await {
         let json_str = serde_json::to_string(&local_desc)?;
         let b64 = encode(&json_str);
+        ws.send_sdp_to_client(&client_name, &b64).await?;
         println!("{b64}");
         //println!("{json_str}");
     } else {
@@ -140,7 +149,8 @@ async fn main() -> Result<(), Error> {
         ));
     }
 
-    check_error(comunication.set_sdp().await, &shutdown).await?;
+    let client_sdp = ws.wait_for_client_sdp().await?;    
+    check_error(comunication.set_sdp(client_sdp).await, &shutdown).await?;
 
     println!("Press ctrl-c to stop");
     tokio::select! {

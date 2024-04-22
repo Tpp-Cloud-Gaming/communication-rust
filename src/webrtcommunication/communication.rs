@@ -112,11 +112,11 @@ impl Communication {
         Ok(Self { peer_connection })
     }
     /// Waits to recibe an sdp string offer to setting the pc remote description
-    pub async fn set_sdp(&self) -> Result<(), Error> {
+    pub async fn set_sdp(&self, sdp:String) -> Result<(), Error> {
         println!("Paste the SDP offer from the remote peer");
-        let line = must_read_stdin()?;
-        let desc_data = decode(line.as_str())?;
-        let offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
+        //let line = must_read_stdin()?;
+        //let desc_data = decode(line.as_str())?;
+        let offer: RTCSessionDescription = serde_json::from_str::<RTCSessionDescription>(&sdp)?;
         // Set the remote SessionDescription
         if self
             .peer_connection

@@ -4,6 +4,7 @@ pub mod sound;
 pub mod utils;
 pub mod video;
 pub mod webrtcommunication;
+pub mod websocketprotocol;
 use std::io::{Error, ErrorKind};
 use std::sync::{mpsc, Arc};
 
@@ -26,11 +27,14 @@ use crate::utils::shutdown::Shutdown;
 use crate::utils::webrtc_const::STUN_ADRESS;
 use crate::webrtcommunication::communication::{encode, Communication};
 use crate::webrtcommunication::latency::Latency;
+use crate::websocketprotocol::websocketprotocol::WsProtocol;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     // Initialize Log:
-
+    let mut ws: WsProtocol = WsProtocol::WsProtocol().await?;  
+    ws.initClient("axel", "franco", "valorant").await?; 
+    
     env_logger::builder().format_target(false).init();
     let shutdown = Shutdown::new();
 
@@ -96,7 +100,9 @@ async fn main() -> Result<(), Error> {
 
     // Set the remote SessionDescription: ACA METER USER INPUT Y PEGAR EL SDP
     // Wait for the offer to be pasted
-    comunication.set_sdp().await?;
+    
+    let sdp = ws.wait_for_offerer_sdp().await?;
+    comunication.set_sdp(sdp).await?;
     let peer_connection = comunication.get_peer();
 
     // Create an answer
@@ -126,6 +132,7 @@ async fn main() -> Result<(), Error> {
         // IMPRIMIR SDP EN BASE64
         let json_str = serde_json::to_string(&local_desc)?;
         let b64 = encode(&json_str);
+        ws.send_sdp_to_offerer("franco", &b64).await?;
         println!("{b64}");
     } else {
         log::error!("RECEIVER | Generate local_description failed!");

@@ -15,7 +15,7 @@ impl WsProtocol {
             Ok(ws) => {
                 return Ok(WsProtocol {ws})
             }
-            Err(e) => {
+            Err(_) => {
                 return Err(Error::new(ErrorKind::Other, "Error connecting to the server"));
             }
         }
@@ -25,7 +25,7 @@ impl WsProtocol {
     pub async fn init_offer(&mut self, username: &str) -> Result<(), Error> {
         match self.ws.send_text(format!("initOfferer|{}", username)).await {
             Ok(_) => Ok(()),
-            Err(e) => {
+            Err(_) => {
                 return Err(Error::new(ErrorKind::Other, "Error sending offer message"));
             }
         }
@@ -58,7 +58,7 @@ impl WsProtocol {
     pub async fn send_sdp_to_client(&mut self, client_name: &str, sdp: &str) -> Result<(), Error> {
         match self.ws.send_text(format!("offererSdp|{}|{}", client_name, sdp)).await{
             Ok(_) => return Ok(()),
-            Err(e) => {
+            Err(_) => {
                 return Err(Error::new(ErrorKind::Other, "Error sending sdp message"));
             }
 
@@ -87,10 +87,10 @@ impl WsProtocol {
         }
     }
 
-    pub async fn initClient(&mut self, username:&str, offerer_username:&str, game_name:&str) -> Result<(), Error> {
+    pub async fn init_client(&mut self, username:&str, offerer_username:&str, game_name:&str) -> Result<(), Error> {
         match self.ws.send_text(format!("initClient|{}|{}|{}", username, offerer_username, game_name)).await {
             Ok(_) => return Ok(()),
-            Err(e) => {
+            Err(_) => {
                 return Err(Error::new(ErrorKind::Other, "Error sending init client message"));
             }
         };

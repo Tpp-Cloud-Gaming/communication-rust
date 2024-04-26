@@ -6,5 +6,7 @@ pub mod input;
 pub mod output;
 pub mod utils;
 pub mod websocketprotocol;
+pub mod services;
+pub mod front_connection;
 
 

@@ -28,12 +28,5 @@ winput = "0.2.5"
 websockets = "0.3.0"
 
 
- [[bin]]
- name = "sender"
- path = "src/sender.rs"
-
- [[bin]]
- name = "receiver"
- path = "src/receiver.rs"
 
  

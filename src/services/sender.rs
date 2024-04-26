@@ -1,11 +1,3 @@
-pub mod input;
-pub mod output;
-pub mod sound;
-pub mod utils;
-pub mod video;
-pub mod webrtcommunication;
-pub mod websocketprotocol;
-
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,12 +9,12 @@ use crate::utils::shutdown::Shutdown;
 use crate::video::video_capture::start_video_capture;
 use crate::webrtcommunication::communication::{encode, Communication};
 
-use input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
-use output::button_controller::ButtonController;
-use output::mouse_controller::MouseController;
+use crate::input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
+use crate::output::button_controller::ButtonController;
+use crate::output::mouse_controller::MouseController;
 use webrtc::data_channel::RTCDataChannel;
 
-use utils::shutdown;
+use crate::utils::shutdown;
 use webrtc::api::media_engine::{MIME_TYPE_H264, MIME_TYPE_OPUS};
 use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::media::Sample;
@@ -41,139 +33,149 @@ use crate::utils::webrtc_const::{
 use crate::webrtcommunication::latency::Latency;
 use crate::websocketprotocol::websocketprotocol::WsProtocol;
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    
-    
-    let mut ws = WsProtocol::WsProtocol().await?;
-    ws.init_offer("franco").await?;   
-    let client_name = ws.wait_for_game_solicitude().await?;
-    
-    //Start log
-    env_logger::builder().format_target(false).init();
-    let shutdown = Shutdown::new();
 
-    let barrier = Arc::new(Barrier::new(5));
-
-    //Create audio frames channels
-    let (tx_audio, rx_audio) = channel(100);
-
-    // Create video frame channels
-    let (tx_video, rx_video) = channel(100);
-
-    let comunication =
-        check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
-
-    let shutdown_audio = shutdown.clone();
-
-    let barrier_audio = barrier.clone();
-    tokio::spawn(async move {
-        sound::audio_capture::start_audio_capture(tx_audio, shutdown_audio, barrier_audio).await;
-    });
-
-    // Start the video capture
-    let shutdown_video = shutdown.clone();
-
-    let barrier_video = barrier.clone();
-    tokio::spawn(async move {
-        start_video_capture(tx_video, shutdown_video, barrier_video).await;
-    });
-
-    let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
-
-    let pc = comunication.get_peer();
-
-    let (_rtp_sender, audio_track) =
-        create_track_sample(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
-    let (rtp_video_sender, video_track) =
-        create_track_rtp(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
-
-    // Start the latency measurement
-    check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
-
-    channel_handler(&pc, shutdown.clone());
-
-    let shutdown_cpy_3 = shutdown.clone();
-    tokio::spawn(async move {
-        read_rtcp(shutdown_cpy_3.clone(), rtp_video_sender).await;
-    });
-
-    let barrier_audio_send = barrier.clone();
-    let shutdown_cpy_2 = shutdown.clone();
-    tokio::spawn(async move {
-        start_audio_sending(barrier_audio_send, rx_audio, audio_track, shutdown_cpy_2).await;
-    });
-
-    let barrier_video_send = barrier.clone();
-    let shutdown_cpy_4 = shutdown.clone();
-    tokio::spawn(async move {
-        start_video_sending(barrier_video_send, rx_video, video_track, shutdown_cpy_4).await;
-    });
-
-    set_peer_events(&pc, done_tx, barrier.clone());
-
-    // Create an answer to send to the other process
-    let offer = match pc.create_offer(None).await {
-        Ok(offer) => offer,
-        Err(_) => {
-            shutdown.notify_error(true).await;
-            return Err(Error::new(ErrorKind::Other, "Error creating offer"));
-        }
-    };
-    // Create channel that is blocked until ICE Gathering is complete
-    let mut gather_complete = pc.gathering_complete_promise().await;
-
-    // Sets the LocalDescription, and starts our UDP listeners
-    if let Err(_e) = pc.set_local_description(offer).await {
-        shutdown.notify_error(true).await;
-        return Err(Error::new(
-            ErrorKind::Other,
-            "Error setting local description",
-        ));
-    }
-
-    let _ = gather_complete.recv().await;
-
-    if let Some(local_desc) = pc.local_description().await {
-        let json_str = serde_json::to_string(&local_desc)?;
-        let b64 = encode(&json_str);
-        ws.send_sdp_to_client(&client_name, &b64).await?;
-        println!("{b64}");
-        //println!("{json_str}");
-    } else {
-        log::error!("SENDER | Generate local_description failed");
-        shutdown.notify_error(true).await;
-        return Err(Error::new(
-            ErrorKind::Other,
-            "Generate local_description failed",
-        ));
-    }
-
-    let client_sdp = ws.wait_for_client_sdp().await?;    
-    check_error(comunication.set_sdp(client_sdp).await, &shutdown).await?;
-
-    println!("Press ctrl-c to stop");
-    tokio::select! {
-        _ = done_rx.recv() => {
-            log::info!("SENDER | Received done signal");
-        }
-        _ = tokio::signal::ctrl_c() => {
-            println!();
-        }
-        _ = shutdown.wait_for_shutdown() => {
-            log::info!("RECEIVER | Error notifier signal");
-        }
-    };
-
-    if pc.close().await.is_err() {
-        return Err(Error::new(
-            ErrorKind::Other,
-            "Error closing peer connection",
-        ));
-    }
-
-    Ok(())
+pub struct SenderSide  {  
 }
+    impl SenderSide{
+
+    
+        pub async fn new(offerer_name: &str) -> Result<(),Error> {
+            
+            let mut ws = WsProtocol::WsProtocol().await?;
+            ws.init_offer(offerer_name).await?;   
+            let client_name = ws.wait_for_game_solicitude().await?;
+            
+            //Start log
+            env_logger::builder().format_target(false).init();
+            let shutdown = Shutdown::new();
+
+            let barrier = Arc::new(Barrier::new(5));
+
+            //Create audio frames channels
+            let (tx_audio, rx_audio) = channel(100);
+
+            // Create video frame channels
+            let (tx_video, rx_video) = channel(100);
+
+            let comunication =
+                check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
+
+            let shutdown_audio = shutdown.clone();
+
+            let barrier_audio = barrier.clone();
+            tokio::spawn(async move {
+                crate::sound::audio_capture::start_audio_capture(tx_audio, shutdown_audio, barrier_audio).await;
+            });
+
+            // Start the video capture
+            let shutdown_video = shutdown.clone();
+
+            let barrier_video = barrier.clone();
+            tokio::spawn(async move {
+                start_video_capture(tx_video, shutdown_video, barrier_video).await;
+            });
+
+            let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
+
+            let pc = comunication.get_peer();
+
+            let (_rtp_sender, audio_track) =
+                create_track_sample(pc.clone(), shutdown.clone(), MIME_TYPE_OPUS, AUDIO_TRACK_ID).await?;
+            let (rtp_video_sender, video_track) =
+                create_track_rtp(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
+
+            // Start the latency measurement
+            check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
+
+            channel_handler(&pc, shutdown.clone());
+
+            let shutdown_cpy_3 = shutdown.clone();
+            tokio::spawn(async move {
+                read_rtcp(shutdown_cpy_3.clone(), rtp_video_sender).await;
+            });
+
+            let barrier_audio_send = barrier.clone();
+            let shutdown_cpy_2 = shutdown.clone();
+            tokio::spawn(async move {
+                start_audio_sending(barrier_audio_send, rx_audio, audio_track, shutdown_cpy_2).await;
+            });
+
+            let barrier_video_send = barrier.clone();
+            let shutdown_cpy_4 = shutdown.clone();
+            tokio::spawn(async move {
+                start_video_sending(barrier_video_send, rx_video, video_track, shutdown_cpy_4).await;
+            });
+
+            set_peer_events(&pc, done_tx, barrier.clone());
+
+            // Create an answer to send to the other process
+            let offer = match pc.create_offer(None).await {
+                Ok(offer) => offer,
+                Err(_) => {
+                    shutdown.notify_error(true).await;
+                    return Err(Error::new(ErrorKind::Other, "Error creating offer"));
+                }
+            };
+            // Create channel that is blocked until ICE Gathering is complete
+            let mut gather_complete = pc.gathering_complete_promise().await;
+
+            // Sets the LocalDescription, and starts our UDP listeners
+            if let Err(_e) = pc.set_local_description(offer).await {
+                shutdown.notify_error(true).await;
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "Error setting local description",
+                ));
+            }
+
+            let _ = gather_complete.recv().await;
+
+            if let Some(local_desc) = pc.local_description().await {
+                let json_str = serde_json::to_string(&local_desc)?;
+                let b64 = encode(&json_str);
+                ws.send_sdp_to_client(&client_name, &b64).await?;
+                println!("{b64}");
+                //println!("{json_str}");
+            } else {
+                log::error!("SENDER | Generate local_description failed");
+                shutdown.notify_error(true).await;
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "Generate local_description failed",
+                ));
+            }
+
+            let client_sdp = ws.wait_for_client_sdp().await?;    
+            check_error(comunication.set_sdp(client_sdp).await, &shutdown).await?;
+
+            println!("Press ctrl-c to stop");
+            tokio::select! {
+                _ = done_rx.recv() => {
+                    log::info!("SENDER | Received done signal");
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    println!();
+                }
+                _ = shutdown.wait_for_shutdown() => {
+                    log::info!("RECEIVER | Error notifier signal");
+                }
+            };
+
+            if pc.close().await.is_err() {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "Error closing peer connection",
+                ));
+            }
+
+            Ok(())
+
+
+        }
+
+}
+
+
 
 /// Creates a TrackLocalStaticSample and adds it to the provided peer connection
 ///
@@ -356,7 +358,7 @@ async fn start_audio_sending(
     barrier_audio_send.wait().await;
 
     let mut error_tracker =
-        utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
+        crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
     loop {
         let data = match rx.recv().await {
@@ -425,7 +427,7 @@ async fn start_video_sending(
     barrier_video_send.wait().await;
 
     let mut error_tracker =
-        utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
+        crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
     loop {
         let data = match rx.recv().await {

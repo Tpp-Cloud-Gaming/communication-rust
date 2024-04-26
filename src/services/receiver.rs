@@ -31,7 +31,7 @@ impl ReceiverSide{
 
     pub async fn new(client_name: &str, offerer_name: &str, game_name: &str) -> Result<(), Error> {
         // Initialize Log:
-        let mut ws: WsProtocol = WsProtocol::WsProtocol().await?;  
+        let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;  
         ws.initClient(client_name, offerer_name, game_name).await?; 
         
         env_logger::builder().format_target(false).init();

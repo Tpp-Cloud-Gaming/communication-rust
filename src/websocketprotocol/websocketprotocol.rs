@@ -9,7 +9,7 @@ pub struct WsProtocol {
 
 impl WsProtocol {
 
-    pub async fn WsProtocol() -> Result<WsProtocol, Error> {
+    pub async fn ws_protocol() -> Result<WsProtocol, Error> {
         let ws = WebSocket::connect("wss://cloud-gaming-server.onrender.com").await;
         match ws {
             Ok(ws) => {

@@ -1,5 +1,4 @@
 use std::io::Error;
-use cpal::platform::StreamInner;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::net::TcpListener;
@@ -29,11 +28,14 @@ impl FrontConnection {
         tokio::spawn(async move {
             let mut reader = BufReader::new(socket);
             loop {
+                
                 let mut buffer = Vec::new();
-                reader
-                    .read_until(b'\n', &mut buffer)
+                let bytes_read = reader.read_until(b'\n', &mut buffer)
                     .await
                     .expect("Failed to read until newline");
+                if bytes_read == 0 {
+                    return;
+                };                                
                 let msg = String::from_utf8(buffer).expect("Failed to convert to string");
                 let msg = msg.trim_end_matches('\n').to_string();
                 tx.send(msg).await.expect("channel send failed");
@@ -43,8 +45,8 @@ impl FrontConnection {
     }
 
     pub async fn read_message(&mut self) -> Result<String, Error> {
-        let bytes_read = self.rx.recv().await.expect("channel recv failed");
-        Ok(bytes_read)
+        let msg = self.rx.recv().await.expect("channel recv failed");
+        Ok(msg)
     }
 
     pub async fn waiting_to_start(&mut self) -> Result<Client, Error> {

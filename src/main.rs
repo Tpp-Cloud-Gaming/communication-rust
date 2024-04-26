@@ -12,7 +12,7 @@ use crate::services::receiver::ReceiverSide;
 use crate::services::sender::SenderSide;
 use crate::front_connection::front_protocol::{FrontConnection, ClientType};
 
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {

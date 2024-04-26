@@ -39,9 +39,9 @@ pub struct SenderSide  {
     impl SenderSide{
 
     
-        pub async fn new(offerer_name: &str) -> Result<(),Error> {
+        pub async fn new(offerer_name: &str) -> Result<(),Error> {            
             
-            let mut ws = WsProtocol::WsProtocol().await?;
+            let mut ws = WsProtocol::ws_protocol().await?;
             ws.init_offer(offerer_name).await?;   
             let client_name = ws.wait_for_game_solicitude().await?;
             

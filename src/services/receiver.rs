@@ -22,18 +22,14 @@ use crate::webrtcommunication::communication::{encode, Communication};
 use crate::webrtcommunication::latency::Latency;
 use crate::websocketprotocol::websocketprotocol::WsProtocol;
 
+pub struct ReceiverSide {}
 
-pub struct ReceiverSide{
-
-}
-
-impl ReceiverSide{
-
+impl ReceiverSide {
     pub async fn new(client_name: &str, offerer_name: &str, game_name: &str) -> Result<(), Error> {
         // Initialize Log:
-        let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;  
-        ws.init_client(client_name, offerer_name, game_name).await?; 
-        
+        let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
+        ws.init_client(client_name, offerer_name, game_name).await?;
+
         env_logger::builder().format_target(false).init();
         let shutdown = Shutdown::new();
 
@@ -64,13 +60,15 @@ impl ReceiverSide{
         });
 
         // Create video frame channels
-        let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
+        let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) =
+            mpsc::channel();
         let shutdown_player = shutdown.clone();
         tokio::spawn(async move {
             start_video_player(rx_video, shutdown_player).await;
         });
 
-        let (tx_audio, rx_audio): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) = mpsc::channel();
+        let (tx_audio, rx_audio): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) =
+            mpsc::channel();
         let shutdown_audio = shutdown.clone();
         tokio::spawn(async move {
             crate::sound::audio_player::start_audio_player(rx_audio, shutdown_audio).await;
@@ -99,7 +97,7 @@ impl ReceiverSide{
 
         // Set the remote SessionDescription: ACA METER USER INPUT Y PEGAR EL SDP
         // Wait for the offer to be pasted
-        
+
         let sdp = ws.wait_for_offerer_sdp().await?;
         comunication.set_sdp(sdp).await?;
         let peer_connection = comunication.get_peer();
@@ -158,11 +156,8 @@ impl ReceiverSide{
         shutdown.shutdown();
 
         Ok(())
-
     }
 }
-
-
 
 /// Sets on track event for the provided connection
 ///

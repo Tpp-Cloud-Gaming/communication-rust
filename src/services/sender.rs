@@ -7,7 +7,7 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::Barrier;
 
 use crate::utils::shutdown::Shutdown;
-use crate::video::video_capture::start_video_capture;
+use crate::video::video_capture::{select_game_window, start_video_capture};
 use crate::webrtcommunication::communication::{encode, Communication};
 
 use crate::input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
@@ -46,7 +46,7 @@ impl SenderSide {
         let shutdown = Shutdown::new();
 
         // Start game
-        initialize_game(&client_info.client_name)?;
+        let game_id = initialize_game(&client_info.game_path)?;
 
         let barrier = Arc::new(Barrier::new(5));
 
@@ -71,12 +71,15 @@ impl SenderSide {
             .await;
         });
 
+        // Get window id of the game
+        let pid = select_game_window(game_id) as u64;
+
         // Start the video capture
         let shutdown_video = shutdown.clone();
 
         let barrier_video = barrier.clone();
         tokio::spawn(async move {
-            start_video_capture(tx_video, shutdown_video, barrier_video).await;
+            start_video_capture(tx_video, shutdown_video, barrier_video, pid).await;
         });
 
         let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -496,10 +499,10 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, _shutdown: shutdown
     }));
 }
 
-fn initialize_game(game_name: &str) -> Result<(), Error> {
+fn initialize_game(game_path: &str) -> Result<u32, Error> {
     // TODO: Check tokio option. Handle the error non generically
-    if let Err(_err) = Command::new(game_name).spawn() {
-        return Err(Error::new(ErrorKind::Other, "Error initializing game"));
-    };
-    Ok(())
+    match Command::new(game_path).spawn() {
+        Ok(child) => Ok(child.id()),
+        Err(_) => Err(Error::new(ErrorKind::Other, "Error initializing game")),
+    }
 }

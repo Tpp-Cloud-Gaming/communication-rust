@@ -129,7 +129,7 @@ impl ReceiverSide {
             // IMPRIMIR SDP EN BASE64
             let json_str = serde_json::to_string(&local_desc)?;
             let b64 = encode(&json_str);
-            ws.send_sdp_to_offerer("franco", &b64).await?;
+            ws.send_sdp_to_offerer(offerer_name, &b64).await?;
             println!("{b64}");
         } else {
             log::error!("RECEIVER | Generate local_description failed!");

@@ -6,6 +6,7 @@ pub struct WsProtocol {
 }
 
 /// Represents the info of the client trying to connect to a sender service
+#[derive(Debug)]
 pub struct ClientInfo {
     pub client_name: String,
     pub game_name: String,

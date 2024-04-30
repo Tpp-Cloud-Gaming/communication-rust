@@ -1,13 +1,13 @@
 use std::io::{Error, ErrorKind};
-use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Barrier;
 
+use crate::services::sender_utils::{initialize_game, select_game_window};
 use crate::utils::shutdown::Shutdown;
-use crate::video::video_capture::{select_game_window, start_video_capture};
+use crate::video::video_capture::start_video_capture;
 use crate::webrtcommunication::communication::{encode, Communication};
 
 use crate::input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
@@ -37,13 +37,17 @@ use crate::websocketprotocol::websocketprotocol::WsProtocol;
 pub struct SenderSide {}
 impl SenderSide {
     pub async fn new(offerer_name: &str) -> Result<(), Error> {
+        //Start log
+        env_logger::builder().format_target(false).init();
+        // Start shutdown
+        let shutdown = Shutdown::new();
+
+        // WAit for client to request a connection
         let mut ws = WsProtocol::ws_protocol().await?;
         ws.init_offer(offerer_name).await?;
         let client_info = ws.wait_for_game_solicitude().await?;
 
-        //Start log
-        env_logger::builder().format_target(false).init();
-        let shutdown = Shutdown::new();
+        log::info!("SENDER | Received client info | {:?}", client_info);
 
         // Start game
         let game_id = initialize_game(&client_info.game_path)?;
@@ -497,12 +501,4 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, _shutdown: shutdown
             })
         }
     }));
-}
-
-fn initialize_game(game_path: &str) -> Result<u32, Error> {
-    // TODO: Check tokio option. Handle the error non generically
-    match Command::new(game_path).spawn() {
-        Ok(child) => Ok(child.id()),
-        Err(_) => Err(Error::new(ErrorKind::Other, "Error initializing game")),
-    }
 }

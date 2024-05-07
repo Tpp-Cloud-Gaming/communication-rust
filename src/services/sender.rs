@@ -50,7 +50,9 @@ impl SenderSide {
         log::info!("SENDER | Received client info | {:?}", client_info);
 
         // Start game
-        let game_id = initialize_game(&client_info.game_path)?;
+        let game_path = &client_info.game_path;
+        
+        let game_id = initialize_game(game_path)?;
 
         let barrier = Arc::new(Barrier::new(5));
 
@@ -76,7 +78,7 @@ impl SenderSide {
         });
 
         // Get window id of the game
-        let pid = select_game_window(game_id) as u64;
+        let pid = select_game_window(game_path) as u64;
 
         // Start the video capture
         let shutdown_video = shutdown.clone();

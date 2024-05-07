@@ -1,6 +1,11 @@
 use std::io::{Error, ErrorKind};
+use std::mem;
 use std::process::Command;
 
+use winapi::shared::minwindef::HMODULE;
+use winapi::um::processthreadsapi::OpenProcess;
+use winapi::um::psapi::{EnumProcessModulesEx, GetModuleFileNameExW};
+use winapi::um::winnt::{PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
 use winapi::{
     shared::{
         minwindef::{BOOL, DWORD, LPARAM, TRUE},
@@ -21,8 +26,8 @@ pub fn initialize_game(game_path: &str) -> Result<u32, Error> {
 }
 
 unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    let hwnds: &mut Vec<(HWND, String, String, DWORD)> =
-        &mut *(lparam as *mut Vec<(HWND, String, String, DWORD)>);
+    let hwnds: &mut Vec<(HWND, String, String, DWORD, String)> =
+        &mut *(lparam as *mut Vec<(HWND, String, String, DWORD, String)>);
 
     let mut class_name = [0u16; 256];
     let mut window_text = [0u16; 256];
@@ -42,6 +47,8 @@ unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL
     let mut process_id: DWORD = 0;
     GetWindowThreadProcessId(hwnd, &mut process_id);
 
+    let path_name = path_name(process_id);
+
     //let a = &lparam as *mut Vec<isize>;
     if IsWindowVisible(hwnd) == TRUE
         && IsWindowEnabled(hwnd) == TRUE
@@ -52,26 +59,32 @@ unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL
             class_name_as_str.to_string(),
             window_text_as_str.to_string(),
             process_id,
+            path_name
         ));
     }
 
     TRUE
 }
 
-pub fn select_game_window(pid: u32) -> usize {
-    let mut hwnds: Vec<(HWND, String, String, DWORD)> = Vec::new();
-    unsafe { EnumWindows(Some(enumerate_callback), &mut hwnds as *mut _ as LPARAM) };
-
+pub fn select_game_window(game_path: &str) -> u32 {
     let mut window_handle = 1000;
-    // Inside a while to wait for the window of the game to start
-    while window_handle == 1000 {
+    let mut handle_found = false;
+
+    while handle_found == false {
+        let mut hwnds: Vec<(HWND, String, String, DWORD, String)> = Vec::new();
+        unsafe { EnumWindows(Some(enumerate_callback), &mut hwnds as *mut _ as LPARAM) };
+
+        
+        // Inside a while to wait for the window of the game to start
+    
         for (count, element) in hwnds.iter().enumerate() {
             println!(
-                "[{}] PID: {:?}, Class Name:  {}, Window Text: {}",
-                count, element.3, element.1, element.2
+                "[{}] PID: {:?}, Class Name:  {}, Window Text: {}, Game Path [{}] [{}]",
+                count, element.3, element.1, element.2, element.4, game_path
             );
-            if element.3 == pid {
-                window_handle = count;
+            if element.4 == game_path {
+                window_handle = element.3;
+                handle_found = true;
                 log::info!(
                     "SENDER | Found game window | [{}] PID: {:?}, Class Name:  {}, Window Text: {}",
                     count,
@@ -83,4 +96,43 @@ pub fn select_game_window(pid: u32) -> usize {
         }
     }
     window_handle
+}
+
+pub fn path_name( pid:  DWORD) -> String
+{
+
+    let mut path_name = String::new();
+    let mut cb_needed: DWORD = 0;
+    let mut h_mods: [HMODULE; 1024] =  [0u8 as HMODULE; 1024];
+
+    // Get a handle to the process.
+    let h_process = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,winapi::shared::minwindef::FALSE, pid) };
+
+    if h_process == winapi::shared::ntdef::NULL {
+        println!("ERROR");
+    }
+
+
+   // Get a list of all the modules in this process.
+    if unsafe { EnumProcessModulesEx(h_process, h_mods.as_mut_ptr(),  mem::size_of_val(&h_mods) as DWORD, &mut cb_needed, winapi::um::psapi::LIST_MODULES_DEFAULT) == TRUE }
+    {
+        
+        let module_count = (cb_needed / mem::size_of::<HMODULE>() as DWORD) as usize;
+            for i in 0..module_count {
+                let mut sz_mod_name = [0u16; winapi::shared::minwindef::MAX_PATH];
+
+                // Get the full path to the module's file.
+                if unsafe { GetModuleFileNameExW(h_process, h_mods[i], sz_mod_name.as_mut_ptr(), sz_mod_name.len() as DWORD) } != 0 {
+                    // Print the module name and handle value.
+                    let module_name = String::from_utf16(&sz_mod_name).unwrap();
+                    let trimmed_name = module_name.trim_matches(char::from(0));
+                    if trimmed_name.ends_with(".exe") || trimmed_name.ends_with(".EXE")  {
+                        path_name = trimmed_name.to_owned();
+                    }
+                    
+                }
+            }
+    }
+
+    return path_name;
 }

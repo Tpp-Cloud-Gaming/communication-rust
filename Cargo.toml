@@ -21,7 +21,7 @@ chrono = "0.4.33"
 sntpc = "0.3.7"
 env_logger = "0.10.0"
 gstreamer = "0.22.1"
-winapi = { version = "0.3.9", features = ["winuser"] }
+winapi = { version = "0.3.9", features = ["winuser", "psapi"] }
 gstreamer-app = "0.22.0"
 gstreamer-video = "0.22.1"
 winput = "0.2.5"

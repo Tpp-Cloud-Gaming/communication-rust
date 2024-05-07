@@ -66,7 +66,7 @@ unsafe extern "system" fn enumerate_callback(hwnd: HWND, lparam: LPARAM) -> BOOL
     TRUE
 }
 
-pub fn select_game_window(game_path: &str) -> u32 {
+pub fn select_game_window(game_path: &str) -> u64 {
     let mut window_handle = 1000;
     let mut handle_found = false;
 
@@ -83,7 +83,7 @@ pub fn select_game_window(game_path: &str) -> u32 {
                 count, element.3, element.1, element.2, element.4, game_path
             );
             if element.4 == game_path {
-                window_handle = element.3;
+                window_handle = element.0 as u64;
                 handle_found = true;
                 log::info!(
                     "SENDER | Found game window | [{}] PID: {:?}, Class Name:  {}, Window Text: {}",

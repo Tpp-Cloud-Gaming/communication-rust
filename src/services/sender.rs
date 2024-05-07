@@ -78,14 +78,14 @@ impl SenderSide {
         });
 
         // Get window id of the game
-        let pid = select_game_window(game_path) as u64;
+        let hwnd = select_game_window(game_path);
 
         // Start the video capture
         let shutdown_video = shutdown.clone();
 
         let barrier_video = barrier.clone();
         tokio::spawn(async move {
-            start_video_capture(tx_video, shutdown_video, barrier_video, pid).await;
+            start_video_capture(tx_video, shutdown_video, barrier_video, hwnd).await;
         });
 
         let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);

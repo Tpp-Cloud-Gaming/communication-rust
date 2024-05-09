@@ -20,7 +20,7 @@ def send_string_to_port(host, port, message):
 # Example usage
 if __name__ == "__main__":
     server_host = "localhost"  # Replace with the actual server address
-    server_port = 2930  # Replace with the desired port number
+    server_port = 2930  # Replace with the desired port numbers
     message_to_send = "startGameWithUser|axel|franco_god|Cuphead\n"
     #message_to_send = "startOffering|franco\n"
 

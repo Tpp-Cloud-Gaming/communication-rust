@@ -1,9 +1,7 @@
 use gstreamer::{glib, prelude::*, Element, Pipeline};
 
 use std::{
-    collections::HashMap,
-    io::{self, Error},
-    sync::Arc,
+    collections::HashMap, io::{self, Error}, net::Shutdown, sync::Arc
 };
 
 use tokio::sync::mpsc::Sender;
@@ -25,15 +23,15 @@ use super::video_const::{ENCODER_BITRATE, GSTREAMER_FRAMES, VIDEO_CAPTURE_PIPELI
 /// * `barrier` - Used for synchronization.
 pub async fn start_video_capture(
     tx_video: Sender<Vec<u8>>,
-    shutdown: shutdown::Shutdown,
+    shutdown: &mut shutdown::Shutdown,
     barrier: Arc<Barrier>,
     game_id: u64,
 ) {
-    shutdown.add_task().await;
+    shutdown.add_task("Video capture").await;
 
     // Initialize GStreamer
     if let Err(e) = gstreamer::init() {
-        shutdown.notify_error(false).await;
+        shutdown.notify_error(false, "initialize gstreamer video capture").await;
         log::error!(
             "VIDEO CAPTURE | Failed to initialize gstreamer: {}",
             e.message()
@@ -52,7 +50,7 @@ pub async fn start_video_capture(
     let elements = match create_elements(game_id) {
         Ok(e) => e,
         Err(e) => {
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false, "create elements video capture").await;
             log::error!(
                 "VIDEO CAPTURE | Failed to create elements: {}",
                 e.to_string()
@@ -61,10 +59,10 @@ pub async fn start_video_capture(
         }
     };
 
-    let pipeline = match create_pipeline(elements, tx_video, caps) {
+    let pipeline = match create_pipeline(elements, tx_video, caps, shutdown.clone()) {
         Ok(p) => p,
         Err(e) => {
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false,"crate pipeline video capture").await;
             log::error!(
                 "VIDEO CAPTURE | Failed to create pipeline: {}",
                 e.to_string()
@@ -75,7 +73,7 @@ pub async fn start_video_capture(
 
     // Start playing Payload
     if let Err(e) = pipeline.set_state(gstreamer::State::Playing) {
-        shutdown.notify_error(false).await;
+        shutdown.notify_error(false, "failed set to playing video capture").await;
         log::error!(
             "VIDEO CAPTURE | Failed to set the pipeline to the `Playing` state: {}",
             e.to_string()
@@ -87,7 +85,7 @@ pub async fn start_video_capture(
     let shutdown_cpy = shutdown.clone();
     tokio::select! {
         _ = shutdown.wait_for_error() => {
-            log::debug!("VIDEO CAPTURE | ERROR NOTIFIED");
+            log::error!("VIDEO CAPTURE | ERROR NOTIFIED");
         },
         _ = tokio::spawn(async move {
             read_bus(pipeline_cpy, shutdown_cpy).await;
@@ -95,7 +93,7 @@ pub async fn start_video_capture(
             log::debug!("VIDEO CAPTURE | BUS READ FINISHED");
         }
     }
-
+    log::error!("VIDEO CAPTURE | About to set null state on video");
     if let Err(e) = pipeline.set_state(gstreamer::State::Null) {
         log::error!(
             "VIDEO CAPTURE | Failed to set the pipeline to the `Null` state: {}",
@@ -168,6 +166,7 @@ fn create_pipeline(
     elements: HashMap<&str, Element>,
     tx_video: Sender<Vec<u8>>,
     caps: gstreamer::Caps,
+    shutdown: shutdown::Shutdown
 ) -> Result<Pipeline, Error> {
     let sink = gstreamer_app::AppSink::builder()
         .caps(&gstreamer::Caps::builder("application/x-rtp").build())
@@ -205,6 +204,12 @@ fn create_pipeline(
                     Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
                     Err(err) => {
                         log::error!("VIDEO CAPTURE | {}", err);
+                        let shutdown_cpy = shutdown.clone();
+                        let _ = Box::pin(async move {    
+                            shutdown_cpy.notify_error(false, "Video capture Set callbacks").await;
+                            log::error!("SENDER | Notify error sended");
+                            
+                        });
                         Err(gstreamer::FlowError::Error)
                     }
                 },

@@ -28,7 +28,7 @@ impl InputCapture {
     /// * `shutdown` - A shutdown handle for managing the finalization of the thread.
     pub async fn new(
         pc: Arc<RTCPeerConnection>,
-        shutdown: shutdown::Shutdown,
+        shutdown: &mut shutdown::Shutdown,
     ) -> Result<InputCapture, Error> {
         let button_channel: Arc<RTCDataChannel> =
             match pc.create_data_channel(KEYBOARD_CHANNEL_LABEL, None).await {
@@ -50,18 +50,18 @@ impl InputCapture {
                     ))
                 }
             };
-
+        
+        let  shutdown_cpy = shutdown.clone();
         Ok(InputCapture {
-            shutdown,
+            shutdown: shutdown_cpy,
             button_channel,
             mouse_channel,
         })
     }
 
-    pub async fn start(&self) -> Result<(), Error> {
-        self.shutdown.add_task().await;
+    pub async fn start(&mut self) -> Result<(), Error> {
+        self.shutdown.add_task("Input Capture").await;
 
-        println!("Starting");
         let receiver: EventReceiver = match message_loop::start() {
             Ok(receiver) => receiver,
             Err(_e) => {
@@ -78,7 +78,6 @@ impl InputCapture {
             }
             _ = start_handler(receiver, self.button_channel.clone(), self.mouse_channel.clone(),self.shutdown.clone()) => {
                 message_loop::stop();
-                println!("Stopped");
 
             }
         }
@@ -237,7 +236,7 @@ async fn handle_button_action(
             .send_text(std::format!("{}{}", action, text).as_str())
             .await
         {
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false, "Button action channel").await;
             return Err(Error::new(
                 ErrorKind::Other,
                 "Error sending message through data channel",

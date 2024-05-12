@@ -20,7 +20,7 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
     let bus = match pipeline.bus() {
         Some(b) => b,
         None => {
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false, "read bus gstreamer utils").await;
             log::error!("{pipeline_name} | Pipeline bus not found");
             return;
         }
@@ -36,7 +36,7 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
                     err.src().map(|s| s.path_string()),
                     err.error()
                 );
-                shutdown.notify_error(false).await;
+                shutdown.notify_error(false,"error from element gutils").await;
                 break;
             }
             MessageView::StateChanged(state_changed) => {

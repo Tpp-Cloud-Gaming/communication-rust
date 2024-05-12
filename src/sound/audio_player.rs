@@ -26,7 +26,7 @@ pub async fn start_audio_player(rx_audio: Receiver<Vec<u8>>, shutdown: shutdown:
             "AUDIO PLAYER | Error initializing GStreamer: {}",
             e.to_string()
         );
-        shutdown.notify_error(false).await;
+        shutdown.notify_error(false, "Start audio player audio_player").await;
         return;
     };
 
@@ -49,7 +49,7 @@ pub async fn start_audio_player(rx_audio: Receiver<Vec<u8>>, shutdown: shutdown:
         Ok(e) => e,
         Err(e) => {
             log::error!("AUDIO PLAYER | Error creating elements: {}", e.message);
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false, "Error creating elements audio player").await;
             return;
         }
     };
@@ -58,7 +58,7 @@ pub async fn start_audio_player(rx_audio: Receiver<Vec<u8>>, shutdown: shutdown:
         Ok(p) => p,
         Err(e) => {
             log::error!("AUDIO PLAYER | Error creating pipeline: {}", e.to_string());
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false, "Error creating pipeline audio player").await;
             return;
         }
     };
@@ -66,7 +66,7 @@ pub async fn start_audio_player(rx_audio: Receiver<Vec<u8>>, shutdown: shutdown:
     let pipeline_cpy = pipeline.clone();
     let shutdown_cpy = shutdown.clone();
     tokio::select! {
-        _ = shutdown.wait_for_shutdown() => {
+        _ = shutdown.wait_for_error( ) => {
             log::info!("AUDIO PLAYER | Shutdown received");
         }
         _ = tokio::spawn(async move {

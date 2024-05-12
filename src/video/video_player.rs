@@ -16,12 +16,12 @@ use super::video_const::VIDEO_PLAYER_PIPELINE_NAME;
 ///
 /// * `rx_video` - A Receiver for receiving video frames.
 /// * `shutdown` - A shutdown handle for managing the finalization of the thread.
-pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown: shutdown::Shutdown) {
-    shutdown.add_task().await;
+pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown:&mut shutdown::Shutdown) {
+    shutdown.add_task("Start video player").await;
 
     // Initialize GStreamer
     if let Err(e) = gstreamer::init() {
-        shutdown.notify_error(false).await;
+        shutdown.notify_error(false, "failed initialize gstreamer video player").await;
         log::error!(
             "VIDEO PLAYER | Failed to initialize gstreamer: {}",
             e.message()
@@ -39,7 +39,7 @@ pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown: shutdown:
     let elements = match create_elements() {
         Ok(e) => e,
         Err(e) => {
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false, "").await;
             log::error!("VIDEO PLAYER | Failed to create elements: {}", e);
             return;
         }
@@ -48,7 +48,7 @@ pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown: shutdown:
     let pipeline = match create_pipeline(elements, caps, rx_video) {
         Ok(p) => p,
         Err(e) => {
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false, "").await;
             log::error!("VIDEO PLAYER | Failed to create pipeline: {}", e);
             return;
         }
@@ -62,7 +62,7 @@ pub async fn start_video_player(rx_video: Receiver<Vec<u8>>, shutdown: shutdown:
         }) => {
             log::info!("VIDEO PLAYER | Pipeline finished");
         },
-        _ = shutdown.wait_for_shutdown() => {
+        _ = shutdown.wait_for_error() => {
             log::info!("VIDEO PLAYER | Shutdown received");
         },
     }

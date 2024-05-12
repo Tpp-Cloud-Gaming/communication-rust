@@ -26,11 +26,9 @@ impl MouseController {
     ///
     /// * `ch` - An Arc reference to the RTCDataChannel.
     pub fn start_mouse_controller(ch: Arc<RTCDataChannel>) {
-        //println!("Mouse controller started");
         ch.on_message(Box::new(move |msg: DataChannelMessage| {
             Box::pin(async move {
-                //println!("{:?}", msg.data);
-
+                
                 let s = String::from_utf8_lossy(&msg.data);
 
                 // Split the string into two parts

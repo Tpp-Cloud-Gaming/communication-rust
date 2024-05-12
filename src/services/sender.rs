@@ -40,7 +40,7 @@ impl SenderSide {
         //Start log
         env_logger::builder().format_target(false).init();
         // Start shutdown
-        let shutdown = Shutdown::new();
+        let mut shutdown = Shutdown::new();
 
         // WAit for client to request a connection
         let mut ws = WsProtocol::ws_protocol().await?;
@@ -65,13 +65,13 @@ impl SenderSide {
         let comunication =
             check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
 
-        let shutdown_audio = shutdown.clone();
+        let mut shutdown_audio = shutdown.clone();
 
         let barrier_audio = barrier.clone();
         tokio::spawn(async move {
             crate::sound::audio_capture::start_audio_capture(
                 tx_audio,
-                shutdown_audio,
+                &mut shutdown_audio,
                 barrier_audio,
             )
             .await;
@@ -81,11 +81,11 @@ impl SenderSide {
         let hwnd = select_game_window(game_path);
 
         // Start the video capture
-        let shutdown_video = shutdown.clone();
+        let mut shutdown_video = shutdown.clone();
 
         let barrier_video = barrier.clone();
         tokio::spawn(async move {
-            start_video_capture(tx_video, shutdown_video, barrier_video, hwnd).await;
+            start_video_capture(tx_video, &mut shutdown_video, barrier_video, hwnd).await;
         });
 
         let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -103,30 +103,30 @@ impl SenderSide {
 
         channel_handler(&pc, shutdown.clone());
 
-        let shutdown_cpy_3 = shutdown.clone();
+        let mut shutdown_cpy_3 = shutdown.clone();
         tokio::spawn(async move {
-            read_rtcp(shutdown_cpy_3.clone(), rtp_video_sender).await;
+            read_rtcp(&mut shutdown_cpy_3.clone(), rtp_video_sender).await;
         });
 
         let barrier_audio_send = barrier.clone();
-        let shutdown_cpy_2 = shutdown.clone();
+        let mut shutdown_cpy_2 = shutdown.clone();
         tokio::spawn(async move {
-            start_audio_sending(barrier_audio_send, rx_audio, audio_track, shutdown_cpy_2).await;
+            start_audio_sending(barrier_audio_send, rx_audio, audio_track, &mut  shutdown_cpy_2).await;
         });
 
         let barrier_video_send = barrier.clone();
-        let shutdown_cpy_4 = shutdown.clone();
+        let mut shutdown_cpy_4 = shutdown.clone();
         tokio::spawn(async move {
-            start_video_sending(barrier_video_send, rx_video, video_track, shutdown_cpy_4).await;
+            start_video_sending(barrier_video_send, rx_video, video_track,  &mut shutdown_cpy_4).await;
         });
 
-        set_peer_events(&pc, done_tx, barrier.clone());
+        set_peer_events(&pc, done_tx, barrier.clone(), shutdown.clone());
 
         // Create an answer to send to the other process
         let offer = match pc.create_offer(None).await {
             Ok(offer) => offer,
             Err(_) => {
-                shutdown.notify_error(true).await;
+                shutdown.notify_error(true, "Create offer").await;
                 return Err(Error::new(ErrorKind::Other, "Error creating offer"));
             }
         };
@@ -135,7 +135,7 @@ impl SenderSide {
 
         // Sets the LocalDescription, and starts our UDP listeners
         if let Err(_e) = pc.set_local_description(offer).await {
-            shutdown.notify_error(true).await;
+            shutdown.notify_error(true, "Set local description").await;
             return Err(Error::new(
                 ErrorKind::Other,
                 "Error setting local description",
@@ -150,10 +150,9 @@ impl SenderSide {
             ws.send_sdp_to_client(&client_info.client_name, &b64)
                 .await?;
             println!("{b64}");
-            //println!("{json_str}");
         } else {
             log::error!("SENDER | Generate local_description failed");
-            shutdown.notify_error(true).await;
+            shutdown.notify_error(true, "Local description").await;
             return Err(Error::new(
                 ErrorKind::Other,
                 "Generate local_description failed",
@@ -172,7 +171,8 @@ impl SenderSide {
                 println!();
             }
             _ = shutdown.wait_for_shutdown() => {
-                log::info!("RECEIVER | Error notifier signal");
+                log::error!("RECEIVER | Error notifier signal");
+                return Ok(())
             }
         };
 
@@ -182,7 +182,7 @@ impl SenderSide {
                 "Error closing peer connection",
             ));
         }
-
+        
         Ok(())
     }
 }
@@ -218,7 +218,7 @@ async fn create_track_sample(
     {
         Ok(rtp_sender) => Ok((rtp_sender, track)),
         Err(_) => {
-            shutdown.notify_error(true).await;
+            shutdown.notify_error(true, "Add track sample").await;
             Err(Error::new(
                 ErrorKind::Other,
                 "Error setting local description",
@@ -258,7 +258,7 @@ async fn create_track_rtp(
     {
         Ok(rtp_sender) => Ok((rtp_sender, track)),
         Err(_) => {
-            shutdown.notify_error(true).await;
+            shutdown.notify_error(true, "Add track rtp").await;
             Err(Error::new(
                 ErrorKind::Other,
                 "Error setting local description",
@@ -278,33 +278,63 @@ fn set_peer_events(
     pc: &Arc<RTCPeerConnection>,
     done_tx: tokio::sync::mpsc::Sender<()>,
     barrier: Arc<Barrier>,
+    shutdown: shutdown::Shutdown
 ) {
     // Set the handler for ICE connection state
     // This will notify you when the peer has connected/disconnected
     pc.on_ice_connection_state_change(Box::new(move |connection_state: RTCIceConnectionState| {
         log::info!("SENDER | ICE Connection State has changed | {connection_state}");
         if connection_state == RTCIceConnectionState::Connected {
-            let barrier_cpy = barrier.clone();
-            return Box::pin(async move {
-                println!("SENDER | Barrier espera");
-                barrier_cpy.wait().await;
-                println!("SENDER | Barrier released");
-            });
         }
         Box::pin(async {})
     }));
 
     // Set the handler for Peer connection state
     // This will notify you when the peer has connected/disconnected
+    
     pc.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
         log::info!("Peer Connection State has changed {s}");
 
+        if s == RTCPeerConnectionState::Connected {
+            log::info!("Peer Connection state: Connected");
+            let barrier_cpy = barrier.clone();
+            return Box::pin(async move {
+                println!("SENDER | Barrier waiting");
+                barrier_cpy.wait().await;
+                println!("SENDER | Barrier released");
+            });
+            
+        }
+
+
+        if s == RTCPeerConnectionState::Closed {
+            log::error!("SENDER | Peer connection state: Closed");
+            let shutdown_cpy = shutdown.clone();
+            return Box::pin(async move {    
+                shutdown_cpy.notify_error(true, "Peer connection closed").await;
+                log::error!("SENDER | Notify error sended");
+                
+            });
+
+        }
+
+        
         if s == RTCPeerConnectionState::Failed {
             // Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
             // Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
             // Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
-            log::error!("SENDER | Peer connection failed");
+            log::error!("SENDER | Peer connection state: Failed");
             let _ = done_tx.try_send(());
+        }
+        
+        if s == RTCPeerConnectionState::Disconnected {
+            log::error!("SENDER | Peer connection state: Disconnected");
+            let shutdown_cpy = shutdown.clone();
+            return Box::pin(async move {    
+                shutdown_cpy.notify_error(true, "Peer connection disconnected").await;
+                log::error!("SENDER | Notify error sended");
+                
+            });
         }
 
         Box::pin(async {})
@@ -322,7 +352,7 @@ fn set_peer_events(
 /// The result provided as argument
 async fn check_error<T, E>(result: Result<T, E>, shutdown: &Shutdown) -> Result<T, E> {
     if result.is_err() {
-        shutdown.notify_error(true).await;
+        shutdown.notify_error(true, "Check error").await;
     }
     result
 }
@@ -333,8 +363,8 @@ async fn check_error<T, E>(result: Result<T, E>, shutdown: &Shutdown) -> Result<
 ///
 /// * `shutdown` -  Used for graceful shutdown.
 /// * `rtp_sender` -  RTCRtpSender from which to read messages.
-async fn read_rtcp(shutdown: shutdown::Shutdown, rtp_sender: Arc<RTCRtpSender>) {
-    shutdown.add_task().await;
+async fn read_rtcp(shutdown: &mut shutdown::Shutdown, rtp_sender: Arc<RTCRtpSender>) {
+    shutdown.add_task("Read rtcp").await;
     let mut rtcp_buf = vec![0u8; 1500];
     loop {
         tokio::select! {
@@ -361,39 +391,35 @@ async fn start_audio_sending(
     barrier_audio_send: Arc<Barrier>,
     mut rx: Receiver<Vec<u8>>,
     audio_track: Arc<TrackLocalStaticSample>,
-    shutdown: shutdown::Shutdown,
+    shutdown: &mut shutdown::Shutdown,
 ) {
-    shutdown.add_task().await;
+    shutdown.add_task("Audio sending").await;
     // Wait for other tasks
     barrier_audio_send.wait().await;
-
+    
     let mut error_tracker =
-        crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
+    crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
+    
+    let sample_duration =
+        Duration::from_millis((AUDIO_CHANNELS as u64 * 10000000) / AUDIO_SAMPLE_RATE as u64); //TODO: no hardcodear
 
-    loop {
-        let data = match rx.recv().await {
+        let mut data = match rx.recv().await {
             Some(d) => {
                 error_tracker.increment();
                 d
             }
             None => {
-                if error_tracker.increment_with_error() {
-                    log::error!("SENDER | Max attemps | Error receiving audio data | ",);
-                    shutdown.notify_error(false).await;
+                    shutdown.notify_error(false,"Error receiving video data" ).await;
                     return;
-                } else {
-                    log::warn!("SENDER | Error receiving audio data | ");
-                };
-                continue;
             }
         };
 
-        let sample_duration =
-            Duration::from_millis((AUDIO_CHANNELS as u64 * 10000000) / AUDIO_SAMPLE_RATE as u64); //TODO: no hardcodear
+
+    loop {
 
         if let Err(err) = audio_track
             .write_sample(&Sample {
-                data: data.into(),
+                data: data.clone().into(),
                 duration: sample_duration,
                 ..Default::default()
             })
@@ -402,7 +428,7 @@ async fn start_audio_sending(
             log::warn!("SENDER | Error writing sample | {}", err);
             if error_tracker.increment_with_error() {
                 log::error!("SENDER | Max attemps | Error writing sample | {}", err);
-                shutdown.notify_error(false).await;
+                shutdown.notify_error(false, "Error writing sample").await;
                 return;
             } else {
                 log::warn!("SENDER | Error writing sample | {}", err);
@@ -411,6 +437,25 @@ async fn start_audio_sending(
         } else {
             error_tracker.increment();
         }
+
+
+        data = match rx.try_recv() {
+            Ok(d) => {
+                error_tracker.increment();
+                d
+            }
+            Err(_) => {
+                if error_tracker.increment_with_error() {
+                    log::error!("SENDER | Max attemps | Error receiving audio data | ",);
+                    shutdown.notify_error(false, "Error receiveing audio data").await;
+                    return;
+                } else {
+                    log::warn!("SENDER | Error receiving audio data | ");
+                };
+                continue;
+            }
+        };
+
         if shutdown.check_for_error().await {
             return;
         }
@@ -429,9 +474,9 @@ async fn start_video_sending(
     barrier_video_send: Arc<Barrier>,
     mut rx: Receiver<Vec<u8>>,
     video_track: Arc<TrackLocalStaticRTP>,
-    shutdown: shutdown::Shutdown,
+    shutdown: &mut shutdown::Shutdown,
 ) {
-    shutdown.add_task().await;
+    shutdown.add_task("Video sending").await;
     // Wait for connection established
     // TODO: Esto puede generar delay me parece
     barrier_video_send.wait().await;
@@ -439,31 +484,23 @@ async fn start_video_sending(
     let mut error_tracker =
         crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
-    loop {
-        let data = match rx.recv().await {
+        let mut data = match rx.recv().await {
             Some(d) => {
                 error_tracker.increment();
                 d
             }
             None => {
-                if error_tracker.increment_with_error() {
-                    log::error!("SENDER | Max attemps | Error receiving video data |",);
-                    shutdown.notify_error(false).await;
+                    shutdown.notify_error(false,"Error receiving video data" ).await;
                     return;
-                } else {
-                    log::warn!("SENDER | Error receiving video data |");
-                };
-                continue;
             }
         };
 
-        //let sample_duration =
-        //    Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
+    loop {
         if let Err(err) = video_track.write(&data).await {
             log::warn!("SENDER | Error writing sample | {}", err);
             if error_tracker.increment_with_error() {
                 log::error!("SENDER | Max attemps | Error writing sample | {}", err);
-                shutdown.notify_error(false).await;
+                shutdown.notify_error(false, "Error writing sample").await;
                 return;
             } else {
                 log::warn!("SENDER | Error writing sample | {}", err);
@@ -472,6 +509,28 @@ async fn start_video_sending(
         } else {
             error_tracker.increment();
         }
+
+
+        data = match rx.try_recv() {
+            Ok(d) => {
+                error_tracker.increment();
+                d
+            }
+            Err(_) => {
+                if error_tracker.increment_with_error() {
+                    log::error!("SENDER | Max attemps | Error receiving video data |",);
+                    shutdown.notify_error(false,"Error receiving video data" ).await;
+                    return;
+                } else {
+                    log::info!("SENDER | Error receiving video data |");
+                };
+                continue;
+            }
+        };
+
+        //let sample_duration =
+        //    Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
+        
         if shutdown.check_for_error().await {
             return;
         }

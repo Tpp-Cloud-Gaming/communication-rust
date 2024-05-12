@@ -26,33 +26,39 @@ impl Shutdown {
     }
 
     pub async fn wait_for_shutdown(&self) -> Result<SemaphorePermit<'_>, AcquireError> {
-        self.shutdown_notifier.acquire().await
+          self.shutdown_notifier.acquire().await
+    
     }
 
     pub async fn wait_for_error(&self) -> Result<SemaphorePermit<'_>, AcquireError> {
-        let r = self.error_notifier.acquire().await;
+        let r: Result<SemaphorePermit, AcquireError> = self.error_notifier.acquire().await;
+        
         let mut counter = self.counter.lock().await;
         *counter -= 1;
         if *counter == 0 {
+        
             self.shutdown_notifier.add_permits(1);
         }
         r
     }
 
-    pub async fn add_task(&self) {
+    pub async fn add_task(&mut self, task_id:&str ) {
         let mut counter = self.counter.lock().await;
         *counter += 1;
     }
 
     // Task who triggered the shutdown will call this method
-    pub async fn notify_error(&self, main_task: bool) {
+    pub async fn notify_error(&self, main_task: bool, from: &str) {
         {
+            log::error!("Shutdown | Notifying error from {:?}", from);
             let mut counter = self.counter.lock().await;
 
             if !main_task {
                 *counter -= 1;
             }
+            
             if *counter == 0 {
+        
                 self.shutdown_notifier.add_permits(1);
             }
 
@@ -62,9 +68,9 @@ impl Shutdown {
                 *notifier_active = true;
             }
         }
-        if main_task {
-            _ = self.wait_for_shutdown().await;
-        }
+        // if main_task {
+        //     _ = self.wait_for_shutdown().await;
+        // }
     }
 
     pub async fn check_for_error(&self) -> bool {
@@ -78,7 +84,7 @@ impl Shutdown {
                 true
             }
             Err(TryAcquireError::Closed) => {
-                self.notify_error(false).await;
+                self.notify_error(false, "Check for error").await;
                 true
             }
             Err(TryAcquireError::NoPermits) => false,

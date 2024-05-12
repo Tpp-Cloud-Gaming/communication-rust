@@ -19,22 +19,21 @@ use crate::utils::shutdown;
 /// * `barrier` - A used for synchronization.
 pub async fn start_audio_capture(
     tx_audio: Sender<Vec<u8>>,
-    shutdown: shutdown::Shutdown,
+    shutdown: &mut shutdown::Shutdown,
     barrier: Arc<Barrier>,
 ) {
-    shutdown.add_task().await;
-
+    
+    shutdown.add_task("Audio capture").await;
     if let Err(e) = gstreamer::init() {
         log::error!(
             "AUDIO CAPTURE | Error initializing GStreamer: {}",
             e.to_string()
         );
-        shutdown.notify_error(false).await;
+        shutdown.notify_error(false, "Audio capture").await;
         return;
     };
-
+    
     barrier.wait().await;
-    println!("AUDIO CAPTURE | Barrier released");
 
     let caps = gstreamer::Caps::builder("audio/x-raw")
         //.field("rate", 48000)
@@ -45,7 +44,7 @@ pub async fn start_audio_capture(
         Ok(e) => e,
         Err(e) => {
             log::error!("AUDIO CAPTURE | Error creating elements: {}", e.message);
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false, "Create elements audio capture").await;
             return;
         }
     };
@@ -54,7 +53,7 @@ pub async fn start_audio_capture(
         Ok(p) => p,
         Err(e) => {
             log::error!("AUDIO CAPTURE | Error creating pipeline: {}", e.to_string());
-            shutdown.notify_error(false).await;
+            shutdown.notify_error(false, "Creating pipeline audio capture").await;
             return;
         }
     };
@@ -62,8 +61,8 @@ pub async fn start_audio_capture(
     let pipeline_cpy = pipeline.clone();
     let shutdown_cpy = shutdown.clone();
     tokio::select! {
-        _ = shutdown.wait_for_shutdown() => {
-            log::info!("AUDIO CAPTURE | Shutdown received");
+        _ = shutdown.wait_for_error() => {
+            log::error!("AUDIO CAPTURE | Shutdown received");
         }
         _ = tokio::spawn(async move {
             read_bus(pipeline_cpy, shutdown_cpy).await;
@@ -72,6 +71,7 @@ pub async fn start_audio_capture(
         }
     }
 
+    log::error!("AUDIO CAPTURE | About to set null state on audio");
     pipeline
         .set_state(gstreamer::State::Null)
         .expect("Unable to set the pipeline to the `Null` state");

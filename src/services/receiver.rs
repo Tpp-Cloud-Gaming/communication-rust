@@ -41,20 +41,21 @@ impl ReceiverSide {
         let shutdown_cpy = shutdown.clone();
         let pc_cpy = peer_connection.clone();
         //TODO: Retornar errores ?
-        let shutdown_cpy1 = shutdown.clone();
+        let mut shutdown_cpya = shutdown.clone();
+        let mut shutdown_cpy1 = shutdown.clone();
 
         tokio::spawn(async move {
-            match InputCapture::new(pc_cpy, shutdown_cpy).await {
-                Ok(input_capture) => match input_capture.start().await {
+            match InputCapture::new(pc_cpy, &mut shutdown_cpya).await {
+                Ok(mut input_capture) => match input_capture.start().await {
                     Ok(_) => {}
                     Err(e) => {
                         log::error!("Failed to start InputCapture: {}", e);
-                        shutdown_cpy1.notify_error(false).await;
+                        shutdown_cpy1.notify_error(false,"Start input capture").await;
                     }
                 },
                 Err(e) => {
                     log::error!("Failed to create InputCapture: {}", e);
-                    shutdown_cpy1.notify_error(false).await;
+                    shutdown_cpy1.notify_error(false, "Create Input Capture").await;
                 }
             }
         });
@@ -62,9 +63,9 @@ impl ReceiverSide {
         // Create video frame channels
         let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) =
             mpsc::channel();
-        let shutdown_player = shutdown.clone();
+        let mut shutdown_player = shutdown.clone();
         tokio::spawn(async move {
-            start_video_player(rx_video, shutdown_player).await;
+            start_video_player(rx_video, &mut shutdown_player).await;
         });
 
         let (tx_audio, rx_audio): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) =
@@ -180,11 +181,11 @@ fn set_on_track_handler(
         // Check if is a audio track
         if mime_type == MIME_TYPE_OPUS.to_lowercase() {
             let tx_audio_cpy = tx_audio.clone();
-            let shutdown_cpy = shutdown.clone();
+            let mut shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
                 println!("RECEIVER | Got OPUS Track");
                 tokio::spawn(async move {
-                    let _ = read_audio_track(track, &tx_audio_cpy, shutdown_cpy).await;
+                    let _ = read_audio_track(track, &tx_audio_cpy, &mut shutdown_cpy).await;
                 });
             });
         };
@@ -192,11 +193,11 @@ fn set_on_track_handler(
         // Check if is a audio track
         if mime_type == MIME_TYPE_H264.to_lowercase() {
             let tx_video_cpy = tx_video.clone();
-            let shutdown_cpy = shutdown.clone();
+            let mut shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
                 println!("RECEIVER | Got H264 Track");
                 tokio::spawn(async move {
-                    let _ = read_video_track(track, &tx_video_cpy, shutdown_cpy).await;
+                    let _ = read_video_track(track, &tx_video_cpy, &mut shutdown_cpy).await;
                 });
             });
         };
@@ -218,10 +219,10 @@ fn set_on_track_handler(
 async fn read_audio_track(
     track: Arc<TrackRemote>,
     tx: &mpsc::Sender<Vec<u8>>,
-    shutdown: shutdown::Shutdown,
+    shutdown: &mut shutdown::Shutdown,
 ) -> Result<(), Error> {
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
-    shutdown.add_task().await;
+    shutdown.add_task("Read audio track").await;
 
     loop {
         tokio::select! {
@@ -232,14 +233,14 @@ async fn read_audio_track(
                         Ok(_) => {}
                         Err(e) => {
                             log::error!("RECEIVER | Error sending audio packet to channel: {e}");
-                            shutdown.notify_error(false).await;
+                            shutdown.notify_error(false, "Sending audio packet").await;
                             return Err(Error::new(ErrorKind::Other, "Error sending audio packet to channel"));
                         }
                     }
 
                 }else if error_tracker.increment_with_error(){
                         log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
-                        shutdown.notify_error(false).await;
+                        shutdown.notify_error(false,"Error sending rtp packet").await;
                         return Err(Error::new(ErrorKind::Other, "Error reading RTP packet"));
                 }else{
                         log::warn!("RECEIVER | Error reading RTP packet");
@@ -270,10 +271,10 @@ async fn read_audio_track(
 async fn read_video_track(
     track: Arc<TrackRemote>,
     tx: &mpsc::Sender<Vec<u8>>,
-    shutdown: shutdown::Shutdown,
+    shutdown: &mut shutdown::Shutdown,
 ) -> Result<(), Error> {
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
-    shutdown.add_task().await;
+    shutdown.add_task("Read video track").await;
 
     loop {
         let mut buff: [u8; 1400] = [0; 1400];
@@ -286,7 +287,7 @@ async fn read_video_track(
                         Ok(_) => {}
                         Err(e) => {
                             log::error!("RECEIVER | Error sending video packet to channel: {e}");
-                            shutdown.notify_error(false).await;
+                            shutdown.notify_error(false, "read video track sending").await;
                             return Err(Error::new(ErrorKind::Other, "Error sending video packet to channel"));
                         }
 
@@ -294,7 +295,7 @@ async fn read_video_track(
 
                 }else if error_tracker.increment_with_error(){
                         log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
-                        shutdown.notify_error(false).await;
+                        shutdown.notify_error(false, "read video track max attemps").await;
                         return Err(Error::new(ErrorKind::Other, "Error reading RTP packet"));
                 }else{
                         log::warn!("RECEIVER | Error reading RTP packet");
@@ -329,7 +330,7 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
                 // Start the latency measurement
                 if let Err(e) = Latency::start_latency_receiver(d).await {
                     log::error!("RECEIVER | Error starting latency receiver: {e}");
-                    shutdown_cpy.notify_error(false).await;
+                    shutdown_cpy.notify_error(false, "Error sending latency").await;
                 }
             })
         } else {
@@ -340,7 +341,7 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
     }));
 }
 
-//Esta funcion solo sirve para que detecte si algun on ice pasa a connection state failed y ahi
+// Esta funcion solo sirve para que detecte si algun on ice pasa a connection state failed y ahi
 // mande un signal para que todo termine
 
 // Set the handler for ICE connection state

@@ -78,10 +78,10 @@ pub fn select_game_window(game_path: &str) -> u64 {
         // Inside a while to wait for the window of the game to start
     
         for (count, element) in hwnds.iter().enumerate() {
-            println!(
-                "[{}] PID: {:?}, Class Name:  {}, Window Text: {}, Game Path [{}] [{}]",
-                count, element.3, element.1, element.2, element.4, game_path
-            );
+            // println!(
+            //     "[{}] PID: {:?}, Class Name:  {}, Window Text: {}, Game Path [{}] [{}]",
+            //     count, element.3, element.1, element.2, element.4, game_path
+            // );
             if element.4 == game_path {
                 window_handle = element.0 as u64;
                 handle_found = true;

@@ -409,7 +409,7 @@ async fn start_audio_sending(
                 d
             }
             None => {
-                    shutdown.notify_error(false,"Error receiving video data" ).await;
+                    shutdown.notify_error(false,"No audio data received" ).await;
                     return;
             }
         };
@@ -490,7 +490,7 @@ async fn start_video_sending(
                 d
             }
             None => {
-                    shutdown.notify_error(false,"Error receiving video data" ).await;
+                    shutdown.notify_error(false,"No video data received" ).await;
                     return;
             }
         };
@@ -518,8 +518,8 @@ async fn start_video_sending(
             }
             Err(_) => {
                 if error_tracker.increment_with_error() {
-                    log::error!("SENDER | Max attemps | Error receiving video data |",);
-                    shutdown.notify_error(false,"Error receiving video data" ).await;
+                    //log::error!("SENDER | Max attemps | Error receiving video data |",);
+                    //shutdown.notify_error(false,"Error max attemps on video sending" ).await;
                     return;
                 } else {
                     log::info!("SENDER | Error receiving video data |");

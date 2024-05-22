@@ -1,14 +1,8 @@
-use std::{collections::HashMap, io::Error, sync::mpsc::Receiver};
+use std::{collections::HashMap, io::Error};
 
-use gstreamer::{glib, prelude::*, Caps, Element};
-use winapi::um::winuser::ShowCursor;
+use gstreamer::Element;
 
-use crate::utils::{
-    gstreamer_utils::{push_sample, read_bus},
-    shutdown,
-};
 
-use super::video_const::VIDEO_PLAYER_PIPELINE_NAME;
 
 
 /// Creates the elements for the video player pipeline.

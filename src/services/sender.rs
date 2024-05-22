@@ -40,7 +40,7 @@ impl SenderSide {
         //Start log
         env_logger::builder().format_target(false).init();
         // Start shutdown
-        let mut shutdown = Shutdown::new();
+        let shutdown = Shutdown::new();
 
         // WAit for client to request a connection
         let mut ws = WsProtocol::ws_protocol().await?;
@@ -52,7 +52,7 @@ impl SenderSide {
         // Start game
         let game_path = &client_info.game_path;
         
-        let game_id = initialize_game(game_path)?;
+        let _game_id = initialize_game(game_path)?;
 
         let barrier = Arc::new(Barrier::new(4));
 
@@ -92,7 +92,7 @@ impl SenderSide {
 
         channel_handler(&pc, shutdown.clone());
 
-        let mut shutdown_cpy_3 = shutdown.clone();
+        let shutdown_cpy_3 = shutdown.clone();
         tokio::spawn(async move {
             read_rtcp(&mut shutdown_cpy_3.clone(), rtp_video_sender).await;
         });

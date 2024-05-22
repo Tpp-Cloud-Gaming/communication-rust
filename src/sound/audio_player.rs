@@ -1,17 +1,10 @@
-use std::{
-    collections::HashMap,
-    io::{Error, ErrorKind},
-    sync::mpsc::Receiver,
-};
+use std::
+    collections::HashMap
+;
 
-use gstreamer::{glib, prelude::*, Element, Pipeline};
+use gstreamer::{glib, Element};
 
-use crate::utils::{
-    gstreamer_utils::{push_sample, read_bus},
-    shutdown,
-};
 
-use super::audio_const::AUDIO_PLAYER_PIPELINE_NAME;
 
 
 /// Creates the elements for the audio player pipeline.
@@ -19,7 +12,7 @@ use super::audio_const::AUDIO_PLAYER_PIPELINE_NAME;
 /// # Returns
 ///
 /// A Result containing a HashMap with the elements if the operation was successful, otherwise an Error is returned.
-fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
+pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
 
     let rtpopusdepay = gstreamer::ElementFactory::make("rtpopusdepay")

@@ -38,11 +38,10 @@ impl ReceiverSide {
         let peer_connection = comunication.get_peer();
 
         // Start mosue and keyboard capture
-        let shutdown_cpy = shutdown.clone();
         let pc_cpy = peer_connection.clone();
         //TODO: Retornar errores ?
         let mut shutdown_cpya = shutdown.clone();
-        let mut shutdown_cpy1 = shutdown.clone();
+        let shutdown_cpy1 = shutdown.clone();
 
         tokio::spawn(async move {
             match InputCapture::new(pc_cpy, &mut shutdown_cpya).await {

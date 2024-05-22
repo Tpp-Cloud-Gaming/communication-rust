@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Error, sync::mpsc::Receiver};
 use gstreamer::{glib, prelude::*, Caps, Element};
 use winapi::um::winuser::ShowCursor;
 
-use crate::{sound::audio_capture, utils::{
+use crate::{sound::audio_player, utils::{
     gstreamer_utils::{push_sample, read_bus},
     shutdown,
 }, video::video_player};
@@ -55,7 +55,7 @@ pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8
         .field("encoding-name", "OPUS")
         .build();
 
-    let audio_elements = match audio_capture::create_elements() {
+    let audio_elements = match audio_player::create_elements() {
         Ok(e) => e,
         Err(e) => {
             log::error!("AUDIO PLAYER | Error creating elements: {}", e.message);

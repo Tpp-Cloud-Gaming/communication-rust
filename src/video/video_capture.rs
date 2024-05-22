@@ -1,18 +1,12 @@
-use gstreamer::{glib, prelude::*, Element, Pipeline};
+use gstreamer::{glib, Element};
 
-use std::{
-    collections::HashMap, io::{self, Error}, net::Shutdown, sync::Arc
-};
+use std::
+    collections::HashMap
+;
 
-use tokio::sync::mpsc::Sender;
-use tokio::sync::Barrier;
 
-use crate::utils::{
-    gstreamer_utils::{pull_sample, read_bus},
-    shutdown,
-};
 
-use super::video_const::{ENCODER_BITRATE, GSTREAMER_FRAMES, VIDEO_CAPTURE_PIPELINE_NAME};
+use super::video_const::ENCODER_BITRATE;
 
 /// Creates GStreamer elements required for the video capture pipeline.
 ///

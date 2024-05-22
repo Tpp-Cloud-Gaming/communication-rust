@@ -5,9 +5,9 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Barrier;
 
+use crate::gstreamer_pipeline::av_capture::start_capture;
 use crate::services::sender_utils::{initialize_game, select_game_window};
 use crate::utils::shutdown::Shutdown;
-use crate::video::video_capture::start_video_capture;
 use crate::webrtcommunication::communication::{encode, Communication};
 
 use crate::input::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
@@ -54,7 +54,7 @@ impl SenderSide {
         
         let game_id = initialize_game(game_path)?;
 
-        let barrier = Arc::new(Barrier::new(5));
+        let barrier = Arc::new(Barrier::new(4));
 
         //Create audio frames channels
         let (tx_audio, rx_audio) = channel(100);
@@ -65,27 +65,16 @@ impl SenderSide {
         let comunication =
             check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
 
-        let mut shutdown_audio = shutdown.clone();
-
-        let barrier_audio = barrier.clone();
-        tokio::spawn(async move {
-            crate::sound::audio_capture::start_audio_capture(
-                tx_audio,
-                &mut shutdown_audio,
-                barrier_audio,
-            )
-            .await;
-        });
 
         // Get window id of the game
         let hwnd = select_game_window(game_path);
 
         // Start the video capture
-        let mut shutdown_video = shutdown.clone();
+        let mut shutdown_capture = shutdown.clone();
 
         let barrier_video = barrier.clone();
         tokio::spawn(async move {
-            start_video_capture(tx_video, &mut shutdown_video, barrier_video, hwnd).await;
+            start_capture(tx_video, tx_audio,&mut shutdown_capture, barrier_video, hwnd).await;
         });
 
         let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);

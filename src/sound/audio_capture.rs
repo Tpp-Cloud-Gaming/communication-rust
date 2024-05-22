@@ -10,72 +10,7 @@ use super::audio_const::AUDIO_CAPTURE_PIPELINE_NAME;
 use crate::utils::gstreamer_utils::{pull_sample, read_bus};
 use crate::utils::shutdown;
 
-/// Starts the audio capturer by creating the pipeline and sending the audio frames throug the provided Sender.
-///
-/// # Arguments
-///
-/// * `tx_audio` - `A Sender<Vec<u8>>` used to send audio frames.
-/// * `shutdown` - Used for graceful shutdown.
-/// * `barrier` - A used for synchronization.
-pub async fn start_audio_capture(
-    tx_audio: Sender<Vec<u8>>,
-    shutdown: &mut shutdown::Shutdown,
-    barrier: Arc<Barrier>,
-) {
-    
-    shutdown.add_task("Audio capture").await;
-    if let Err(e) = gstreamer::init() {
-        log::error!(
-            "AUDIO CAPTURE | Error initializing GStreamer: {}",
-            e.to_string()
-        );
-        shutdown.notify_error(false, "Audio capture").await;
-        return;
-    };
-    
-    barrier.wait().await;
 
-    let caps = gstreamer::Caps::builder("audio/x-raw")
-        //.field("rate", 48000)
-        .field("channels", 2)
-        .build();
-
-    let elements = match create_elements() {
-        Ok(e) => e,
-        Err(e) => {
-            log::error!("AUDIO CAPTURE | Error creating elements: {}", e.message);
-            shutdown.notify_error(false, "Create elements audio capture").await;
-            return;
-        }
-    };
-
-    let pipeline = match create_pipeline(tx_audio, elements, caps) {
-        Ok(p) => p,
-        Err(e) => {
-            log::error!("AUDIO CAPTURE | Error creating pipeline: {}", e.to_string());
-            shutdown.notify_error(false, "Creating pipeline audio capture").await;
-            return;
-        }
-    };
-
-    let pipeline_cpy = pipeline.clone();
-    let shutdown_cpy = shutdown.clone();
-    tokio::select! {
-        _ = shutdown.wait_for_error() => {
-            log::error!("AUDIO CAPTURE | Shutdown received");
-        }
-        _ = tokio::spawn(async move {
-            read_bus(pipeline_cpy, shutdown_cpy).await;
-        }) => {
-            log::info!("AUDIO CAPTURE | Pipeline finished");
-        }
-    }
-
-    log::error!("AUDIO CAPTURE | About to set null state on audio");
-    pipeline
-        .set_state(gstreamer::State::Null)
-        .expect("Unable to set the pipeline to the `Null` state");
-}
 
 /// Creates GStreamer elements required for audio capture pipeline.
 ///
@@ -83,7 +18,7 @@ pub async fn start_audio_capture(
 /// A Result containing:
 /// * A `HashMap` of Gstreamer elements in case of success.
 /// * A `glib::BoolError` in case of error
-fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
+pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
 
     // Create the elements

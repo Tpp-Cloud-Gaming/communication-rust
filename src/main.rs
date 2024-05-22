@@ -7,6 +7,7 @@ pub mod utils;
 pub mod video;
 pub mod webrtcommunication;
 pub mod websocketprotocol;
+pub mod gstreamer_pipeline;
 
 use crate::front_connection::front_protocol::{ClientType, FrontConnection};
 //use crate::services::receiver::ReceiverSide;

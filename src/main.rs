@@ -10,7 +10,7 @@ pub mod websocketprotocol;
 pub mod gstreamer_pipeline;
 
 use crate::front_connection::front_protocol::{ClientType, FrontConnection};
-//use crate::services::receiver::ReceiverSide;
+use crate::services::receiver::ReceiverSide;
 use crate::services::sender::SenderSide;
 
 use std::io::Error;
@@ -31,10 +31,10 @@ async fn main() -> Result<(), Error> {
                     .expect("Missing offerer name parameter.");
                 let game_name = client.game_name
                     .expect("Missign game name parameter.");
-            // if let Err(_) = ReceiverSide::new(&client.username, &offerer_username, &game_name).await {
-            //     println!("Connection Missed. \nRestarting...");
-            //     continue;
-            // }
+            if let Err(_) = ReceiverSide::new(&client.username, &offerer_username, &game_name).await {
+                println!("Connection Missed. \nRestarting...");
+                continue;
+            }
             break;
         }
         ClientType::SENDER => {

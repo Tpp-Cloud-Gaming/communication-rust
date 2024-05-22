@@ -201,7 +201,7 @@ pub async fn start_capture(
 
     // Start playing Payload
     if let Err(e) = pipeline.set_state(gstreamer::State::Playing) {
-        shutdown.notify_error(false, "failed set to playing video capture").await;
+        shutdown.notify_error(false, "failed set to playing audio video capture").await;
         log::error!(
             "CAPTURE | Failed to set the pipeline to the `Playing` state: {}",
             e.to_string()

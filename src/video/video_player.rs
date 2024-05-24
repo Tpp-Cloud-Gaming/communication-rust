@@ -26,7 +26,7 @@ pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolErr
         .build()?;
 
     let queue = gstreamer::ElementFactory::make("queue")
-        .name("queue")
+        .name("video_player_queue")
         .build()?;
 
     let d3d11videosink = gstreamer::ElementFactory::make("d3d11videosink")

@@ -24,7 +24,7 @@ pub fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Eleme
         .build()?;
 
     let queue = gstreamer::ElementFactory::make("queue")
-        .name("queue")
+        .name("video_capture_queue")
         .build()?;
 
 

@@ -22,7 +22,7 @@ pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolErr
         .build()?;
 
     let queue = gstreamer::ElementFactory::make("queue")
-        .name("queue")
+        .name("audio_capture_queue")
         .build()?;
 
     let audioconvert = gstreamer::ElementFactory::make("audioconvert")

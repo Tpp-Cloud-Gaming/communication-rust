@@ -23,6 +23,11 @@ pub fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Eleme
         .property("window-handle", window_handle)
         .build()?;
 
+    let queue = gstreamer::ElementFactory::make("queue")
+        .name("queue")
+        .build()?;
+
+
     let videoconvert = gstreamer::ElementFactory::make("videoconvert")
         .name("videoconvert")
         .build()?;
@@ -50,6 +55,7 @@ pub fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Eleme
         .build()?;
 
     elements.insert("src", d3d11screencapturesrc);
+    elements.insert("queue", queue);
     elements.insert("convert", videoconvert);
     elements.insert("enc", m264enc);
     elements.insert("pay", rtph264pay);

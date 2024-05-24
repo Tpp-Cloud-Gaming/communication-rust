@@ -147,8 +147,10 @@ fn create_pipeline(
         &video_elements["depay"],
         &video_elements["parse"],
         &video_elements["dec"],
+        &video_elements["queue"],
         &video_elements["sink"],
         audio_source.upcast_ref(),
+        &audio_elements["queue"],
         &audio_elements["depay"],
         &audio_elements["parse"],
         &audio_elements["dec"],
@@ -164,6 +166,7 @@ fn create_pipeline(
         &video_elements["depay"],
         &video_elements["parse"],
         &video_elements["dec"],
+        &video_elements["queue"],
         &video_elements["sink"],
     ]) {
         return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
@@ -171,6 +174,7 @@ fn create_pipeline(
 
     if let Err(e) = gstreamer::Element::link_many([
         audio_source.upcast_ref(),
+        &audio_elements["queue"],
         &audio_elements["depay"],
         &audio_elements["parse"],
         &audio_elements["dec"],

@@ -1,6 +1,6 @@
-use std::{collections::HashMap, io::Error};
+use std::collections::HashMap;
 
-use gstreamer::Element;
+use gstreamer::{glib, Element};
 
 
 
@@ -10,35 +10,36 @@ use gstreamer::Element;
 /// # Returns
 ///
 /// A Result containing a HashMap with the elements if the operation was successful, otherwise an Error is returned.
-pub fn create_elements() -> Result<HashMap<&'static str, Element>, Error> {
+pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
 
     let rtph264depay = gstreamer::ElementFactory::make("rtph264depay")
         .name("rtph264depay")
-        .build()
-        .expect("Could not create rtph264depay element.");
+        .build()?;
 
     let h264parse = gstreamer::ElementFactory::make("h264parse")
         .name("h264parse")
-        .build()
-        .expect("Could not create rtph264depay element.");
+        .build()?;
 
     let d3d11h264dec = gstreamer::ElementFactory::make("d3d11h264dec")
         .name("d3d11h264dec")
-        .build()
-        .expect("Could not create d3d11h264dec element.");
+        .build()?;
+
+    let queue = gstreamer::ElementFactory::make("queue")
+        .name("queue")
+        .build()?;
 
     let d3d11videosink = gstreamer::ElementFactory::make("d3d11videosink")
         .name("d3d11videosink")
         .property("emit-present", true)
         .property("fullscreen", true)
         .property_from_str("fullscreen-toggle-mode", "property")
-        .build()
-        .expect("Could not create d3d11videosink element.");
+        .build()?;
 
     elements.insert("depay", rtph264depay);
     elements.insert("parse", h264parse);
     elements.insert("dec", d3d11h264dec);
+    elements.insert("queue", queue);
     elements.insert("sink", d3d11videosink);
 
     Ok(elements)

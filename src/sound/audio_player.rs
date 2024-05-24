@@ -15,6 +15,10 @@ use gstreamer::{glib, Element};
 pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
 
+    let queue = gstreamer::ElementFactory::make("queue")
+        .name("queue")
+        .build()?;
+
     let rtpopusdepay = gstreamer::ElementFactory::make("rtpopusdepay")
         .name("rtpopusdepay")
         .build()?;
@@ -39,6 +43,7 @@ pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolErr
         .name("autoaudiosink")
         .build()?;
 
+    elements.insert("queue", queue);
     elements.insert("depay", rtpopusdepay);
     elements.insert("parse", opusparse);
     elements.insert("dec", opusdec);

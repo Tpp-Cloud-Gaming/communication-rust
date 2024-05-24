@@ -51,6 +51,7 @@ fn create_pipeline(
 
     if let Err(e) = pipeline.add_many([
         &video_elements["src"],
+        &video_elements["queue"],
         &video_elements["convert"],
         &video_elements["enc"],
         &video_elements["pay"],
@@ -66,11 +67,12 @@ fn create_pipeline(
         return Err(Error::new(io::ErrorKind::Other, e.to_string()));
     }
 
-    if let Err(e) = video_elements["src"].link_filtered(&video_elements["convert"], &video_caps) {
+    if let Err(e) = video_elements["src"].link_filtered(&video_elements["queue"], &video_caps) {
         return Err(Error::new(io::ErrorKind::Other, e.to_string()));
     };
 
     if let Err(e) = gstreamer::Element::link_many([
+        &video_elements["queue"],
         &video_elements["convert"],
         &video_elements["enc"],
         &video_elements["pay"],
@@ -164,11 +166,11 @@ pub async fn start_capture(
     let video_elements = match video_capture::create_elements(game_id) {
         Ok(e) => e,
         Err(e) => {
-            shutdown.notify_error(false, "create elements video capture").await;
             log::error!(
                 "CAPTURE | Failed to create video elements: {}",
                 e.to_string()
             );
+            shutdown.notify_error(false, "create elements video capture").await;
             return;
         }
     };

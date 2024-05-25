@@ -157,7 +157,13 @@ pub fn path_name(pid: DWORD) -> String {
                 // Print the module name and handle value.
                 let module_name = String::from_utf16(&sz_mod_name).unwrap();
                 let trimmed_name = module_name.trim_matches(char::from(0));
-                if trimmed_name.ends_with(".exe") || trimmed_name.ends_with(".EXE") {
+                //list of extensions available
+                let extensions = [".exe", ".url", ".lnk"];
+
+                if extensions
+                    .iter()
+                    .any(|ext| trimmed_name.to_lowercase().ends_with(ext))
+                {
                     path_name = trimmed_name.to_owned();
                 }
             }

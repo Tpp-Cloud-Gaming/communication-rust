@@ -5,7 +5,7 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Barrier;
 
-use crate::services::sender_utils::{initialize_game, select_game_window};
+use crate::services::sender_utils::{getHandler, initialize_game};
 use crate::utils::shutdown::Shutdown;
 use crate::video::video_capture::start_video_capture;
 use crate::webrtcommunication::communication::{encode, Communication};
@@ -51,7 +51,7 @@ impl SenderSide {
 
         // Start game
         let game_path = &client_info.game_path;
-        
+
         let game_id = initialize_game(game_path)?;
 
         let barrier = Arc::new(Barrier::new(5));
@@ -77,8 +77,12 @@ impl SenderSide {
             .await;
         });
 
-        // Get window id of the game
-        let hwnd = select_game_window(game_path);
+        let hwnd: u64 = match getHandler(game_path) {
+            Ok(hwnd) => hwnd,
+            Err(_) => {
+                return Err(Error::new(ErrorKind::Other, "Error getting handler"));
+            }
+        };
 
         // Start the video capture
         let mut shutdown_video = shutdown.clone();
@@ -111,13 +115,25 @@ impl SenderSide {
         let barrier_audio_send = barrier.clone();
         let mut shutdown_cpy_2 = shutdown.clone();
         tokio::spawn(async move {
-            start_audio_sending(barrier_audio_send, rx_audio, audio_track, &mut  shutdown_cpy_2).await;
+            start_audio_sending(
+                barrier_audio_send,
+                rx_audio,
+                audio_track,
+                &mut shutdown_cpy_2,
+            )
+            .await;
         });
 
         let barrier_video_send = barrier.clone();
         let mut shutdown_cpy_4 = shutdown.clone();
         tokio::spawn(async move {
-            start_video_sending(barrier_video_send, rx_video, video_track,  &mut shutdown_cpy_4).await;
+            start_video_sending(
+                barrier_video_send,
+                rx_video,
+                video_track,
+                &mut shutdown_cpy_4,
+            )
+            .await;
         });
 
         set_peer_events(&pc, done_tx, barrier.clone(), shutdown.clone());
@@ -182,7 +198,7 @@ impl SenderSide {
                 "Error closing peer connection",
             ));
         }
-        
+
         Ok(())
     }
 }
@@ -278,20 +294,19 @@ fn set_peer_events(
     pc: &Arc<RTCPeerConnection>,
     done_tx: tokio::sync::mpsc::Sender<()>,
     barrier: Arc<Barrier>,
-    shutdown: shutdown::Shutdown
+    shutdown: shutdown::Shutdown,
 ) {
     // Set the handler for ICE connection state
     // This will notify you when the peer has connected/disconnected
     pc.on_ice_connection_state_change(Box::new(move |connection_state: RTCIceConnectionState| {
         log::info!("SENDER | ICE Connection State has changed | {connection_state}");
-        if connection_state == RTCIceConnectionState::Connected {
-        }
+        if connection_state == RTCIceConnectionState::Connected {}
         Box::pin(async {})
     }));
 
     // Set the handler for Peer connection state
     // This will notify you when the peer has connected/disconnected
-    
+
     pc.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
         log::info!("Peer Connection State has changed {s}");
 
@@ -303,22 +318,19 @@ fn set_peer_events(
                 barrier_cpy.wait().await;
                 println!("SENDER | Barrier released");
             });
-            
         }
-
 
         if s == RTCPeerConnectionState::Closed {
             log::error!("SENDER | Peer connection state: Closed");
             let shutdown_cpy = shutdown.clone();
-            return Box::pin(async move {    
-                shutdown_cpy.notify_error(true, "Peer connection closed").await;
+            return Box::pin(async move {
+                shutdown_cpy
+                    .notify_error(true, "Peer connection closed")
+                    .await;
                 log::error!("SENDER | Notify error sended");
-                
             });
-
         }
 
-        
         if s == RTCPeerConnectionState::Failed {
             // Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
             // Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
@@ -326,14 +338,15 @@ fn set_peer_events(
             log::error!("SENDER | Peer connection state: Failed");
             let _ = done_tx.try_send(());
         }
-        
+
         if s == RTCPeerConnectionState::Disconnected {
             log::error!("SENDER | Peer connection state: Disconnected");
             let shutdown_cpy = shutdown.clone();
-            return Box::pin(async move {    
-                shutdown_cpy.notify_error(true, "Peer connection disconnected").await;
+            return Box::pin(async move {
+                shutdown_cpy
+                    .notify_error(true, "Peer connection disconnected")
+                    .await;
                 log::error!("SENDER | Notify error sended");
-                
             });
         }
 
@@ -396,27 +409,25 @@ async fn start_audio_sending(
     shutdown.add_task("Audio sending").await;
     // Wait for other tasks
     barrier_audio_send.wait().await;
-    
+
     let mut error_tracker =
-    crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
-    
+        crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
+
     let sample_duration =
         Duration::from_millis((AUDIO_CHANNELS as u64 * 10000000) / AUDIO_SAMPLE_RATE as u64); //TODO: no hardcodear
 
-        let mut data = match rx.recv().await {
-            Some(d) => {
-                error_tracker.increment();
-                d
-            }
-            None => {
-                    shutdown.notify_error(false,"No audio data received" ).await;
-                    return;
-            }
-        };
-
+    let mut data = match rx.recv().await {
+        Some(d) => {
+            error_tracker.increment();
+            d
+        }
+        None => {
+            shutdown.notify_error(false, "No audio data received").await;
+            return;
+        }
+    };
 
     loop {
-
         if let Err(err) = audio_track
             .write_sample(&Sample {
                 data: data.clone().into(),
@@ -438,7 +449,6 @@ async fn start_audio_sending(
             error_tracker.increment();
         }
 
-
         data = match rx.try_recv() {
             Ok(d) => {
                 error_tracker.increment();
@@ -447,7 +457,9 @@ async fn start_audio_sending(
             Err(_) => {
                 if error_tracker.increment_with_error() {
                     log::error!("SENDER | Max attemps | Error receiving audio data | ",);
-                    shutdown.notify_error(false, "Error receiveing audio data").await;
+                    shutdown
+                        .notify_error(false, "Error receiveing audio data")
+                        .await;
                     return;
                 } else {
                     log::warn!("SENDER | Error receiving audio data | ");
@@ -484,16 +496,16 @@ async fn start_video_sending(
     let mut error_tracker =
         crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
-        let mut data = match rx.recv().await {
-            Some(d) => {
-                error_tracker.increment();
-                d
-            }
-            None => {
-                    shutdown.notify_error(false,"No video data received" ).await;
-                    return;
-            }
-        };
+    let mut data = match rx.recv().await {
+        Some(d) => {
+            error_tracker.increment();
+            d
+        }
+        None => {
+            shutdown.notify_error(false, "No video data received").await;
+            return;
+        }
+    };
 
     loop {
         if let Err(err) = video_track.write(&data).await {
@@ -509,7 +521,6 @@ async fn start_video_sending(
         } else {
             error_tracker.increment();
         }
-
 
         data = match rx.try_recv() {
             Ok(d) => {
@@ -530,7 +541,7 @@ async fn start_video_sending(
 
         //let sample_duration =
         //    Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
-        
+
         if shutdown.check_for_error().await {
             return;
         }

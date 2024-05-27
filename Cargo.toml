@@ -26,6 +26,7 @@ gstreamer-app = "0.22.0"
 gstreamer-video = "0.22.1"
 winput = "0.2.5"
 websockets = "0.3.0"
+sysinfo = "0.30.12"
 
 
 

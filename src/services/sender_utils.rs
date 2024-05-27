@@ -62,19 +62,10 @@ struct EnumData {
 const HANDLER_RETRIES: usize = 5;
 const HANDLER_SLEEP: usize = 5000;
 
-pub fn initialize_game(game_path: &str) -> Result<u32, Error> {
-    // TODO: Check tokio option. Handle the error non generically
+pub fn initialize_game(game_path: &str) -> Result<(), Error> {
     if (game_path.ends_with(".exe")) {
         match Command::new(game_path).spawn() {
-            Ok(child) => Ok(child.id()),
-            Err(_) => Err(Error::new(ErrorKind::Other, "Error initializing game")),
-        }
-    } else if game_path.ends_with(".lnk") || game_path.ends_with(".url") {
-        match Command::new("cmd")
-            .args(&["/c", "START", "", game_path])
-            .spawn()
-        {
-            Ok(child) => Ok(child.id()),
+            Ok(_child) => Ok(()),
             Err(_) => Err(Error::new(ErrorKind::Other, "Error initializing game")),
         }
     } else {
@@ -85,12 +76,10 @@ pub fn initialize_game(game_path: &str) -> Result<u32, Error> {
     }
 }
 
-pub fn getHandler(target_path: &str) -> Result<u64, Error> {
+pub fn get_handler(target_path: &str) -> Result<u64, Error> {
     let mut found_process: Option<ProcessInfo> = None;
 
-    let mut i: usize = 0;
-
-    for i in 0..HANDLER_RETRIES {
+    for _ in 0..HANDLER_RETRIES {
         if let Ok(processes) = get_processes_info() {
             for process in processes {
                 if process.path == target_path {
@@ -104,7 +93,8 @@ pub fn getHandler(target_path: &str) -> Result<u64, Error> {
         }
         sleep(Duration::from_millis(HANDLER_SLEEP as u64));
     }
-    if i >= HANDLER_RETRIES {
+
+    if found_process.is_none() {
         return Err(Error::new(
             ErrorKind::Other,
             "Process PID not found after retries",

@@ -5,7 +5,7 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Barrier;
 
-use crate::services::sender_utils::{getHandler, initialize_game};
+use crate::services::sender_utils::{get_handler, initialize_game};
 use crate::utils::shutdown::Shutdown;
 use crate::video::video_capture::start_video_capture;
 use crate::webrtcommunication::communication::{encode, Communication};
@@ -42,7 +42,7 @@ impl SenderSide {
         // Start shutdown
         let mut shutdown = Shutdown::new();
 
-        // WAit for client to request a connection
+        // Wait for client to request a connection
         let mut ws = WsProtocol::ws_protocol().await?;
         ws.init_offer(offerer_name).await?;
         let client_info = ws.wait_for_game_solicitude().await?;
@@ -52,7 +52,7 @@ impl SenderSide {
         // Start game
         let game_path = &client_info.game_path;
 
-        let game_id = initialize_game(game_path)?;
+        initialize_game(game_path)?;
 
         let barrier = Arc::new(Barrier::new(5));
 
@@ -77,9 +77,10 @@ impl SenderSide {
             .await;
         });
 
-        let hwnd: u64 = match getHandler(game_path) {
+        let hwnd: u64 = match get_handler(game_path) {
             Ok(hwnd) => hwnd,
             Err(_) => {
+                shutdown.notify_error(true, "get_handler").await;
                 return Err(Error::new(ErrorKind::Other, "Error getting handler"));
             }
         };

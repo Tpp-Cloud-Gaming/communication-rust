@@ -127,6 +127,7 @@ fn create_pipeline(
 ) -> Result<gstreamer::Pipeline, Error> {
     let video_source = gstreamer_app::AppSrc::builder()
         .caps(&video_caps)
+        .block(true)
         .format(gstreamer::Format::Time)
         .is_live(true)
         .do_timestamp(true)
@@ -134,6 +135,7 @@ fn create_pipeline(
 
     let audio_source = gstreamer_app::AppSrc::builder()
         .caps(&audio_caps)
+        .block(true)
         .format(gstreamer::Format::Time)
         .is_live(true)
         .do_timestamp(true)
@@ -185,29 +187,47 @@ fn create_pipeline(
         return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
     };
 
-    video_source.set_callbacks(
-        gstreamer_app::AppSrcCallbacks::builder()
-            .need_data(move |appsrc, _| {
-                push_sample(appsrc, &rx_video)
-                    .map_err(|err| {
-                        log::error!("VIDEO PLAYER | {}", err);
-                    })
-                    .unwrap();
+    tokio::spawn(async move {
+        loop {
+            push_sample(&video_source, &rx_video).map_err(|err| {
+                log::error!("VIDEO PLAYER | {}", err);
             })
-            .build(),
-    );
+            .unwrap();
+        }
+    });
 
-    audio_source.set_callbacks(
-        gstreamer_app::AppSrcCallbacks::builder()
-            .need_data(move |appsrc, _| {
-                push_sample(appsrc, &rx_audio)
-                    .map_err(|err| {
-                        log::error!("AUDIO PLAYER | {}", err);
-                    })
-                    .unwrap();
+    // video_source.set_callbacks(
+    //     gstreamer_app::AppSrcCallbacks::builder()
+    //         .need_data(move |appsrc, _| {
+    //             push_sample(appsrc, &rx_video)
+    //                 .map_err(|err| {
+    //                     log::error!("VIDEO PLAYER | {}", err);
+    //                 })
+    //                 .unwrap();
+    //         })
+    //         .build(),
+    // );
+
+    tokio::spawn(async move {
+        loop {
+            push_sample(&audio_source, &rx_audio).map_err(|err| {
+                log::error!("AUDIO PLAYER | {}", err);
             })
-            .build(),
-    );
+            .unwrap();
+        }
+    });
+
+    // audio_source.set_callbacks(
+    //     gstreamer_app::AppSrcCallbacks::builder()
+    //         .need_data(move |appsrc, _| {
+    //             push_sample(appsrc, &rx_audio)
+    //                 .map_err(|err| {
+    //                     log::error!("AUDIO PLAYER | {}", err);
+    //                 })
+    //                 .unwrap();
+    //         })
+    //         .build(),
+    // );
 
     let videosink = &video_elements["sink"];
     videosink.connect_closure(

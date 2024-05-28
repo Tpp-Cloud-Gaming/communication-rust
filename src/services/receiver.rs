@@ -1,8 +1,8 @@
 use std::io::{Error, ErrorKind};
 use std::sync::{mpsc, Arc};
 
+use crate::gstreamer_pipeline::av_player::start_player;
 use crate::input::input_capture::InputCapture;
-use crate::video::video_player::start_video_player;
 
 use crate::utils::error_tracker::ErrorTracker;
 use crate::utils::shutdown;
@@ -38,11 +38,10 @@ impl ReceiverSide {
         let peer_connection = comunication.get_peer();
 
         // Start mosue and keyboard capture
-        let shutdown_cpy = shutdown.clone();
         let pc_cpy = peer_connection.clone();
         //TODO: Retornar errores ?
         let mut shutdown_cpya = shutdown.clone();
-        let mut shutdown_cpy1 = shutdown.clone();
+        let shutdown_cpy1 = shutdown.clone();
 
         tokio::spawn(async move {
             match InputCapture::new(pc_cpy, &mut shutdown_cpya).await {
@@ -63,16 +62,14 @@ impl ReceiverSide {
         // Create video frame channels
         let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) =
             mpsc::channel();
-        let mut shutdown_player = shutdown.clone();
-        tokio::spawn(async move {
-            start_video_player(rx_video, &mut shutdown_player).await;
-        });
+
 
         let (tx_audio, rx_audio): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) =
             mpsc::channel();
-        let shutdown_audio = shutdown.clone();
+        
+        let mut shutdown_audio = shutdown.clone();
         tokio::spawn(async move {
-            crate::sound::audio_player::start_audio_player(rx_audio, shutdown_audio).await;
+            start_player(rx_video, rx_audio, &mut shutdown_audio).await;
         });
 
         // Set a handler for when a new remote track starts, this handler saves buffers to disk as

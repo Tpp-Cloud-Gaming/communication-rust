@@ -5,10 +5,8 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Barrier;
 
-
-use crate::services::sender_utils::{get_handler, initialize_game};
 use crate::gstreamer_pipeline::av_capture::start_capture;
-use crate::services::sender_utils::{initialize_game, select_game_window};
+use crate::services::sender_utils::{get_handler, initialize_game};
 use crate::utils::shutdown::Shutdown;
 use crate::webrtcommunication::communication::{encode, Communication};
 
@@ -54,9 +52,7 @@ impl SenderSide {
         // Start game
         let game_path = &client_info.game_path;
 
-
         initialize_game(game_path)?;
-
 
         let barrier = Arc::new(Barrier::new(4));
 
@@ -68,7 +64,6 @@ impl SenderSide {
 
         let comunication =
             check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
-
 
         let hwnd: u64 = match get_handler(game_path) {
             Ok(hwnd) => hwnd,
@@ -83,7 +78,14 @@ impl SenderSide {
 
         let barrier_video = barrier.clone();
         tokio::spawn(async move {
-            start_capture(tx_video, tx_audio,&mut shutdown_capture, barrier_video, hwnd).await;
+            start_capture(
+                tx_video,
+                tx_audio,
+                &mut shutdown_capture,
+                barrier_video,
+                hwnd,
+            )
+            .await;
         });
 
         let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);

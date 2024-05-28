@@ -60,7 +60,7 @@ struct EnumData {
 }
 
 const HANDLER_RETRIES: usize = 5;
-const HANDLER_SLEEP: usize = 5000;
+const HANDLER_SLEEP: usize = 10000;
 
 pub fn initialize_game(game_path: &str) -> Result<(), Error> {
     if (game_path.ends_with(".exe")) {
@@ -95,12 +95,13 @@ pub fn get_handler(target_path: &str) -> Result<u64, Error> {
     }
 
     if found_process.is_none() {
+        println!("Process not found PID");
         return Err(Error::new(
             ErrorKind::Other,
             "Process PID not found after retries",
         ));
     }
-
+    println!("Found process");
     for _ in 0..HANDLER_RETRIES {
         if let Some(process) = &found_process {
             match get_hwnd_by_pid(process.pid) {
@@ -110,6 +111,7 @@ pub fn get_handler(target_path: &str) -> Result<u64, Error> {
         }
         sleep(Duration::from_millis(HANDLER_SLEEP as u64));
     }
+    println!("Process not found HWND");
     return Err(Error::new(
         ErrorKind::Other,
         "Process HWND not found after retries",
@@ -131,7 +133,7 @@ fn get_processes_info() -> std::io::Result<Vec<ProcessInfo>> {
             if let Some(path_str) = path.to_str() {
                 processes.push(ProcessInfo {
                     pid: pid.as_u32(),
-                    path: path_str.to_string().replace("\\", "/"),
+                    path: path_str.to_string(),
                 });
             }
         }

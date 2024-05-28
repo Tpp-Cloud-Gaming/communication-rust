@@ -3,8 +3,8 @@ use std::sync::Arc;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use winput::message_loop::EventReceiver;
-use winput::Action;
 use winput::{message_loop, Button};
+use winput::{Action, Vk};
 
 use super::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
 use crate::output::output_const::*;
@@ -50,8 +50,8 @@ impl InputCapture {
                     ))
                 }
             };
-        
-        let  shutdown_cpy = shutdown.clone();
+
+        let shutdown_cpy = shutdown.clone();
         Ok(InputCapture {
             shutdown: shutdown_cpy,
             button_channel,
@@ -104,6 +104,10 @@ async fn start_handler(
     shutdown: shutdown::Shutdown,
 ) {
     let shutdown_cpy = shutdown.clone();
+
+    // The List of keys that will be blocked by the APP:
+    let block_keys = vec![Vk::LeftWin, Vk::RightWin];
+
     loop {
         let shutdown_cpy_loop = shutdown_cpy.clone();
 
@@ -115,6 +119,10 @@ async fn start_handler(
                 action: Action::Press,
                 scan_code: _,
             } => {
+                if block_keys.contains(&vk) {
+                    continue;
+                };
+
                 let button_channel_cpy = button_channel.clone();
                 let key = vk.into_u8().to_string();
                 match handle_button_action(
@@ -134,6 +142,10 @@ async fn start_handler(
                 action: Action::Release,
                 scan_code: _,
             } => {
+                if block_keys.contains(&vk) {
+                    continue;
+                };
+
                 let button_channel_cpy = button_channel.clone();
                 let key = vk.into_u8().to_string();
                 match handle_button_action(

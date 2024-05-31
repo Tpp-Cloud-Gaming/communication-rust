@@ -7,8 +7,10 @@ use crate::input::input_capture::InputCapture;
 use crate::utils::error_tracker::ErrorTracker;
 use crate::utils::shutdown;
 use crate::utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
+use tokio::sync::Barrier;
 use webrtc::api::media_engine::MIME_TYPE_H264;
 use webrtc::data_channel::RTCDataChannel;
+use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::{
     api::media_engine::MIME_TYPE_OPUS, rtp_transceiver::rtp_codec::RTPCodecType,
@@ -37,6 +39,9 @@ impl ReceiverSide {
 
         let peer_connection = comunication.get_peer();
 
+
+        let barrier = Arc::new(Barrier::new(2));
+        let barrier_clone = barrier.clone();
         // Start mosue and keyboard capture
         let pc_cpy = peer_connection.clone();
         //TODO: Retornar errores ?
@@ -45,12 +50,16 @@ impl ReceiverSide {
 
         tokio::spawn(async move {
             match InputCapture::new(pc_cpy, &mut shutdown_cpya).await {
-                Ok(mut input_capture) => match input_capture.start().await {
+                
+                Ok(mut input_capture) => {
+                    barrier_clone.wait().await;
+                    match input_capture.start().await {
                     Ok(_) => {}
                     Err(e) => {
                         log::error!("Failed to start InputCapture: {}", e);
                         shutdown_cpy1.notify_error(false,"Start input capture").await;
                     }
+                }
                 },
                 Err(e) => {
                     log::error!("Failed to create InputCapture: {}", e);
@@ -91,7 +100,9 @@ impl ReceiverSide {
             ));
         }
 
-        //set_on_ice_connection_state_change_handler(&peer_connection, shutdown.clone());
+        
+        add_peer_connection_handler(&peer_connection,shutdown.clone(),barrier);
+        
 
         // Set the remote SessionDescription: ACA METER USER INPUT Y PEGAR EL SDP
         // Wait for the offer to be pasted
@@ -337,30 +348,57 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
         }
     }));
 }
+fn add_peer_connection_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown::Shutdown,barrier: Arc<Barrier>){
 
-// Esta funcion solo sirve para que detecte si algun on ice pasa a connection state failed y ahi
-// mande un signal para que todo termine
+    peer_connection.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
+            log::info!("Peer Connection State has changed {s}");
 
-// Set the handler for ICE connection state
-// This will notify you when the peer has connected/disconnected
-// fn set_on_ice_connection_state_change_handler(
-//     peer_connection: &Arc<RTCPeerConnection>,
-//     _shutdown: shutdown::Shutdown,
-// ) {
-//     peer_connection.on_ice_connection_state_change(Box::new(
-//         move |connection_state: RTCIceConnectionState| {
-//             log::info!("RECEIVER | ICE Connection State has changed | {connection_state}");
+            if s == RTCPeerConnectionState::Connected {
+                let barrier_cpy = barrier.clone();
+                log::info!("Peer Connection state: Connected");
+                return Box::pin(async move {
+                    println!("RECEIVER | Barrier waiting");
+                    barrier_cpy.wait().await;
+                    println!("RECEIVER | Barrier released");
+                });
+            }
 
-//             // if connection_state == RTCIceConnectionState::Connected {
-//             //     //let shutdown_cpy = shutdown.clone();
-//             // } else if connection_state == RTCIceConnectionState::Failed {
-//             //     TODO: ver que hacer en este escenario
-//             //     let shutdown_cpy = shutdown.clone();
-//             //     _ = Box::pin(async move {
-//             //         shutdown_cpy.notify_error(true).await;
-//             //     });
-//             // }
-//             Box::pin(async {})
-//         },
-//     ));
-// }
+            if s == RTCPeerConnectionState::Closed {
+                log::error!("RECEIVER | Peer connection state: Closed");
+                let shutdown_cpy = shutdown.clone();
+                return Box::pin(async move {
+                    shutdown_cpy
+                        .notify_error(true, "Peer connection closed")
+                        .await;
+                    log::error!("RECEIVER | Notify error sended");
+                });
+            }
+
+            if s == RTCPeerConnectionState::Failed {
+                // Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
+                // Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
+                // Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
+                log::error!("SENDER | Peer connection state: Failed");
+                let shutdown_cpy = shutdown.clone();
+                return Box::pin(async move {
+                    shutdown_cpy
+                        .notify_error(true, "Peer connection failed")
+                        .await;
+                    log::error!("RECEIVER | Notify error sended");
+                });
+            }
+
+            if s == RTCPeerConnectionState::Disconnected {
+                log::error!("RECEIVER | Peer connection state: Disconnected");
+                let shutdown_cpy = shutdown.clone();
+                return Box::pin(async move {
+                    shutdown_cpy
+                        .notify_error(true, "Peer connection disconnected")
+                        .await;
+                    log::error!("RECEIVER | Notify error sended");
+                });
+            }
+
+            Box::pin(async {})
+        }));
+}

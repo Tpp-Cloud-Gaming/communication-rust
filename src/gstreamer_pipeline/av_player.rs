@@ -87,7 +87,6 @@ pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8
         },
     }
 
-
     if let Err(e) = pipeline.set_state(gstreamer::State::Null) {
         log::error!("PLAYER | Failed to set pipeline to null: {}", e);
     } else {

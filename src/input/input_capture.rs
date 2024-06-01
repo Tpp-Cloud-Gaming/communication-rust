@@ -112,7 +112,6 @@ async fn start_handler(
     loop {
         let shutdown_cpy_loop = shutdown_cpy.clone();
 
-        tokio::task::spawn(async move {});
 
         match receiver.next_event() {
             message_loop::Event::Keyboard {
@@ -222,6 +221,8 @@ async fn start_handler(
             log::info!("INPUT CAPTURE | Shutdown received on check for error");
             break;
         };
+
+        tokio::task::yield_now().await;
     }
 }
 
@@ -243,22 +244,21 @@ async fn handle_button_action(
     text: String,
     shutdown: shutdown::Shutdown,
 ) -> Result<(), Error> {
-    let action_clone = action.to_owned();
-        if button_channel.ready_state()
-            == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
+    if button_channel.ready_state()
+        == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
+    {
+        if let Err(_e) = button_channel
+            .send_text(std::format!("{}{}", action, text).as_str())
+            .await
         {
-            if let Err(_e) = button_channel
-                .send_text(std::format!("{}{}", action_clone, text).as_str())
-                .await
-            {
-                shutdown.notify_error(false, "Button action channel").await;
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Error sending message through data channel",
-                ));
-            };
+            shutdown.notify_error(false, "Button action channel").await;
+            return Err(Error::new(
+                ErrorKind::Other,
+                "Error sending message through data channel",
+            ));
         };
-        Ok(())
+    };
+    Ok(())
 }
 
 /// Maps the mouse button to the corresponding integer value.

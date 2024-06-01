@@ -78,11 +78,12 @@ pub fn initialize_game(game_path: &str) -> Result<(), Error> {
 
 pub fn get_handler(target_path: &str) -> Result<u64, Error> {
     let mut found_process: Option<ProcessInfo> = None;
-
+    let game_path: String = target_path.replace("\\\\", "\\");
+    sleep(Duration::from_millis(20000));
     for _ in 0..HANDLER_RETRIES {
         if let Ok(processes) = get_processes_info() {
             for process in processes {
-                if process.path == target_path {
+                if process.path == game_path {
                     found_process = Some(process);
                     break;
                 }

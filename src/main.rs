@@ -13,10 +13,16 @@ use crate::front_connection::front_protocol::{ClientType, FrontConnection};
 use crate::services::receiver::ReceiverSide;
 use crate::services::sender::SenderSide;
 
+use tokio::runtime::Handle;
+
 use std::io::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+
+    // Initialize GStreamer
+    gstreamer::init().unwrap();
+
     loop {
         let mut front_connection = FrontConnection::new().await?;
 
@@ -44,6 +50,8 @@ async fn main() -> Result<(), Error> {
             }
         }
     }
+
     println!("Main done");
+    unsafe {gstreamer::deinit();}
     Ok(())
 }

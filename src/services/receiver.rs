@@ -66,6 +66,7 @@ impl ReceiverSide {
                     shutdown_cpy1.notify_error(false, "Create Input Capture").await;
                 }
             }
+            println!("SALGO DE INPUT CAPTURE");
         });
 
         // Create video frame channels
@@ -79,6 +80,7 @@ impl ReceiverSide {
         let mut shutdown_audio = shutdown.clone();
         tokio::spawn(async move {
             start_player(rx_video, rx_audio, &mut shutdown_audio).await;
+            println!("SALGO DEL START_PLAYER");
         });
 
         // Set a handler for when a new remote track starts, this handler saves buffers to disk as
@@ -193,7 +195,7 @@ fn set_on_track_handler(
             return Box::pin(async move {
                 println!("RECEIVER | Got OPUS Track");
                 tokio::spawn(async move {
-                    let _ = read_audio_track(track, &tx_audio_cpy, &mut shutdown_cpy).await;
+                    let _ = read_audio_track(track, tx_audio_cpy, &mut shutdown_cpy).await;
                 });
             });
         };
@@ -205,7 +207,7 @@ fn set_on_track_handler(
             return Box::pin(async move {
                 println!("RECEIVER | Got H264 Track");
                 tokio::spawn(async move {
-                    let _ = read_video_track(track, &tx_video_cpy, &mut shutdown_cpy).await;
+                    let _ = read_video_track(track, tx_video_cpy, &mut shutdown_cpy).await;
                 });
             });
         };
@@ -226,7 +228,7 @@ fn set_on_track_handler(
 /// Result containing `Ok(())` on success. Error on error.
 async fn read_audio_track(
     track: Arc<TrackRemote>,
-    tx: &mpsc::Sender<Vec<u8>>,
+    tx: mpsc::Sender<Vec<u8>>,
     shutdown: &mut shutdown::Shutdown,
 ) -> Result<(), Error> {
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
@@ -259,7 +261,8 @@ async fn read_audio_track(
                 return Ok(());
             }
             _= shutdown.wait_for_error() => {
-                println!("Se cerro el read track");
+                log::info!("READ AUDIO TRACK | Shutdown received");
+                drop(tx);
                 return Ok(());
             }
         }
@@ -278,7 +281,7 @@ async fn read_audio_track(
 /// Result containing `Ok(())` on success. Error on error.
 async fn read_video_track(
     track: Arc<TrackRemote>,
-    tx: &mpsc::Sender<Vec<u8>>,
+    tx: mpsc::Sender<Vec<u8>>,
     shutdown: &mut shutdown::Shutdown,
 ) -> Result<(), Error> {
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
@@ -314,7 +317,8 @@ async fn read_video_track(
                 return Ok(());
             }
             _= shutdown.wait_for_error() => {
-                println!("Se cerro el read track");
+                log::info!("READ VIDEO TRACK | Shutdown received");
+                drop(tx);
                 return Ok(());
             }
         }

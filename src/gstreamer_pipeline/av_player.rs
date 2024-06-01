@@ -21,15 +21,6 @@ pub const PIPELINE_NAME: &str = "AUDIO VIDEO PLAYER";
 pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8>>, shutdown:&mut shutdown::Shutdown) {
     shutdown.add_task("Start player").await;
 
-    // Initialize GStreamer
-    if let Err(e) = gstreamer::init() {
-        shutdown.notify_error(false, "failed initialize gstreamer player").await;
-        log::error!(
-            "PLAYER | Failed to initialize gstreamer: {}",
-            e.message()
-        );
-        return;
-    };
 
     // Create the caps
     let video_caps = gstreamer::Caps::builder("application/x-rtp")
@@ -64,7 +55,7 @@ pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8
         }
     };
 
-    let pipeline = match create_pipeline(video_elements, audio_elements, video_caps, audio_caps, rx_video, rx_audio) {
+    let pipeline = match create_pipeline(video_elements, audio_elements, video_caps, audio_caps, rx_video, rx_audio, shutdown.clone()) {
         Ok(p) => p,
         Err(e) => {
             shutdown.notify_error(false, "").await;
@@ -85,20 +76,27 @@ pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8
 
     let pipeline_cpy = pipeline.clone();
     let shutdown_cpy = shutdown.clone();
+
+    let handle_read_bus = tokio::task::spawn(async move {
+        read_bus(pipeline_cpy, shutdown_cpy).await;
+    });
+
     tokio::select! {
-        _ = tokio::task::spawn(async move {
-            read_bus(pipeline_cpy, shutdown_cpy).await;
-        }) => {
-            log::info!("PLAYER | Pipeline finished");
-        },
         _ = shutdown.wait_for_error() => {
             log::info!("PLAYER | Shutdown received");
         },
     }
 
+
     if let Err(e) = pipeline.set_state(gstreamer::State::Null) {
         log::error!("PLAYER | Failed to set pipeline to null: {}", e);
+    } else {
+        println!("SE CAMBIA EL ESTADO A NULL");
     }
+
+    handle_read_bus.abort();
+
+    
 }
 
 
@@ -124,6 +122,7 @@ fn create_pipeline(
     audio_caps: Caps,
     rx_video: Receiver<Vec<u8>>,
     rx_audio: Receiver<Vec<u8>>,
+    shutdown: shutdown::Shutdown,
 ) -> Result<gstreamer::Pipeline, Error> {
     let video_source = gstreamer_app::AppSrc::builder()
         .caps(&video_caps)
@@ -187,13 +186,28 @@ fn create_pipeline(
         return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
     };
 
+    let mut shutdown_clone = shutdown.clone();
     tokio::spawn(async move {
+        shutdown_clone.add_task("Video push sample").await;
         loop {
-            push_sample(&video_source, &rx_video).map_err(|err| {
+            if let Err(_e) = push_sample(&video_source, &rx_video).map_err(|err| {
                 log::error!("VIDEO PLAYER | {}", err);
-            })
-            .unwrap();
+            }){
+                shutdown_clone.notify_error(false, "failed pushing video sample").await;
+                log::error!(
+                    "RECEIVER | Failed pushing video sample"
+                );
+                break;
+            }
+            if shutdown_clone.check_for_error().await {
+                log::error!(
+                    "VIDEO PUSH SAMPLE | Received Shutdown"
+                );
+                break;
+            }
+
         }
+        println!("salgo del loop de video PIBE");
     });
 
     // video_source.set_callbacks(
@@ -208,13 +222,27 @@ fn create_pipeline(
     //         .build(),
     // );
 
+    let mut shutdown_cpy = shutdown.clone();    
     tokio::spawn(async move {
+        shutdown_cpy.add_task("Audio push sample").await;
         loop {
-            push_sample(&audio_source, &rx_audio).map_err(|err| {
+            if let Err(_e) = push_sample(&audio_source, &rx_audio).map_err(|err| {
                 log::error!("AUDIO PLAYER | {}", err);
-            })
-            .unwrap();
+            }) {
+                shutdown_cpy.notify_error(false, "failed pushing audio sample").await;
+                log::error!(
+                    "RECEIVER | Failed pushing audio sample"
+                );
+                break;
+            }
+            if shutdown_cpy.check_for_error().await {
+                log::error!(
+                    "AUDIO PUSH SAMPLE | Received Shutdown"
+                );
+                break;
+            }
         }
+        println!("salgo del loop de audio PIBE");
     });
 
     // audio_source.set_callbacks(

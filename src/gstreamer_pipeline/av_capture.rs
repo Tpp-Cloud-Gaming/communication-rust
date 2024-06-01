@@ -145,15 +145,7 @@ pub async fn start_capture(
 ) {
     shutdown.add_task("Capture").await;
 
-    // Initialize GStreamer
-    if let Err(e) = gstreamer::init() {
-        shutdown.notify_error(false, "initialize gstreamer capture").await;
-        log::error!(
-            "CAPTURE | Failed to initialize gstreamer: {}",
-            e.message()
-        );
-        return;
-    };
+
     barrier.wait().await;
 
     println!("CAPTURE | Barrier passed");

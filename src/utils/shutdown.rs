@@ -39,6 +39,7 @@ impl Shutdown {
         
             self.shutdown_notifier.add_permits(1);
         }
+        println!("SHUTDOWN COUNT: {}", *counter);
         r
     }
 
@@ -81,6 +82,7 @@ impl Shutdown {
                 if *counter == 0 {
                     self.shutdown_notifier.add_permits(1);
                 }
+                println!("SHUTDOWN COUNT: {}", *counter);
                 true
             }
             Err(TryAcquireError::Closed) => {

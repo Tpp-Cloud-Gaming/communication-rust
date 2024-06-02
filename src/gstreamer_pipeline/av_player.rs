@@ -3,13 +3,16 @@ use std::{collections::HashMap, io::Error, sync::mpsc::Receiver};
 use gstreamer::{glib, prelude::*, Caps, Element};
 use winapi::um::winuser::ShowCursor;
 
-use crate::{sound::audio_player, utils::{
-    gstreamer_utils::{push_sample, read_bus},
-    shutdown,
-}, video::video_player};
+use crate::{
+    sound::audio_player,
+    utils::{
+        gstreamer_utils::{push_sample, read_bus},
+        shutdown,
+    },
+    video::video_player,
+};
 
 pub const PIPELINE_NAME: &str = "AUDIO VIDEO PLAYER";
-
 
 /// Starts the audio and video player by creating the pipeline and reading the video and audio frames from the provided Receiver.
 ///
@@ -18,9 +21,12 @@ pub const PIPELINE_NAME: &str = "AUDIO VIDEO PLAYER";
 /// * `rx_video` - A Receiver for receiving video frames.
 /// * `rx_audio` - A Receiver for receiving audio frames.
 /// * `shutdown` - A shutdown handle for managing the finalization of the thread.
-pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8>>, shutdown:&mut shutdown::Shutdown) {
+pub async fn start_player(
+    rx_video: Receiver<Vec<u8>>,
+    rx_audio: Receiver<Vec<u8>>,
+    shutdown: &mut shutdown::Shutdown,
+) {
     shutdown.add_task("Start player").await;
-
 
     // Create the caps
     let video_caps = gstreamer::Caps::builder("application/x-rtp")
@@ -50,12 +56,22 @@ pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8
         Ok(e) => e,
         Err(e) => {
             log::error!("AUDIO PLAYER | Error creating elements: {}", e.message);
-            shutdown.notify_error(false, "Error creating elements audio player").await;
+            shutdown
+                .notify_error(false, "Error creating elements audio player")
+                .await;
             return;
         }
     };
 
-    let pipeline = match create_pipeline(video_elements, audio_elements, video_caps, audio_caps, rx_video, rx_audio, shutdown.clone()) {
+    let pipeline = match create_pipeline(
+        video_elements,
+        audio_elements,
+        video_caps,
+        audio_caps,
+        rx_video,
+        rx_audio,
+        shutdown.clone(),
+    ) {
         Ok(p) => p,
         Err(e) => {
             shutdown.notify_error(false, "").await;
@@ -66,7 +82,9 @@ pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8
 
     // Start playing Payload
     if let Err(e) = pipeline.set_state(gstreamer::State::Playing) {
-        shutdown.notify_error(false, "failed set to playing audio video player").await;
+        shutdown
+            .notify_error(false, "failed set to playing audio video player")
+            .await;
         log::error!(
             "PLAYER | Failed to set the pipeline to the `Playing` state: {}",
             e.to_string()
@@ -75,7 +93,7 @@ pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8
     }
 
     let pipeline_cpy = pipeline.clone();
-    let mut  shutdown_cpy = shutdown.clone();
+    let mut shutdown_cpy = shutdown.clone();
 
     let handle_read_bus = tokio::task::spawn(async move {
         read_bus(pipeline_cpy, &mut shutdown_cpy).await;
@@ -94,11 +112,7 @@ pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8
     }
 
     handle_read_bus.abort();
-
-    
 }
-
-
 
 /// Creates the pipeline for the audio and video player.
 ///
@@ -191,20 +205,19 @@ fn create_pipeline(
         loop {
             if let Err(_e) = push_sample(&video_source, &rx_video).map_err(|err| {
                 log::error!("VIDEO PLAYER | {}", err);
-            }){
-                shutdown_clone.notify_error(false, "failed pushing video sample").await;
-                log::error!(
-                    "RECEIVER | Failed pushing video sample"
-                );
+            }) {
+                shutdown_clone
+                    .notify_error(false, "failed pushing video sample")
+                    .await;
+                log::error!("RECEIVER | Failed pushing video sample");
                 break;
             }
-            if shutdown_clone.check_for_error().await {
-                log::error!(
-                    "VIDEO PUSH SAMPLE | Received Shutdown"
-                );
-                break;
-            }
-
+            // if shutdown_clone.check_for_error().await {
+            //     log::error!(
+            //         "VIDEO PUSH SAMPLE | Received Shutdown"
+            //     );
+            //     break;
+            // }
         }
         println!("salgo del loop de video PIBE");
     });
@@ -221,25 +234,23 @@ fn create_pipeline(
     //         .build(),
     // );
 
-    let mut shutdown_cpy = shutdown.clone();    
+    let mut shutdown_cpy = shutdown.clone();
     tokio::spawn(async move {
         shutdown_cpy.add_task("Audio push sample").await;
         loop {
             if let Err(_e) = push_sample(&audio_source, &rx_audio).map_err(|err| {
                 log::error!("AUDIO PLAYER | {}", err);
             }) {
-                shutdown_cpy.notify_error(false, "failed pushing audio sample").await;
-                log::error!(
-                    "RECEIVER | Failed pushing audio sample"
-                );
+                shutdown_cpy
+                    .notify_error(false, "failed pushing audio sample")
+                    .await;
+                log::error!("RECEIVER | Failed pushing audio sample");
                 break;
             }
-            if shutdown_cpy.check_for_error().await {
-                log::error!(
-                    "AUDIO PUSH SAMPLE | Received Shutdown"
-                );
-                break;
-            }
+            // if shutdown_cpy.check_for_error().await {
+            //     log::error!("AUDIO PUSH SAMPLE | Received Shutdown");
+            //     break;
+            // }
         }
         println!("salgo del loop de audio PIBE");
     });

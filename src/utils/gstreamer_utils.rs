@@ -20,7 +20,9 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: &mut shutdown::Shutdown) {
     let bus = match pipeline.bus() {
         Some(b) => b,
         None => {
-            shutdown.notify_error(false, "read bus gstreamer utils").await;
+            shutdown
+                .notify_error(false, "read bus gstreamer utils")
+                .await;
             log::error!("{pipeline_name} | Pipeline bus not found");
             return;
         }
@@ -36,7 +38,9 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: &mut shutdown::Shutdown) {
                     err.src().map(|s| s.path_string()),
                     err.error()
                 );
-                shutdown.notify_error(false,"error from element gutils").await;
+                shutdown
+                    .notify_error(false, "error from element gutils")
+                    .await;
                 break;
             }
             MessageView::StateChanged(state_changed) => {
@@ -46,18 +50,13 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: &mut shutdown::Shutdown) {
                         state_changed.old(),
                         state_changed.current()
                     );
+                    if shutdown.check_for_error().await {
+                        println!("Enter in check for error");
+                        break;
+                    }
                 }
             }
-            MessageView::Eos(..) => {
-                log::info!("{pipeline_name} | End of stream received");
-                break;
-            }
-            _ => {
-                if shutdown.check_for_error().await {
-                    println!("Enter in check for error");
-                    break;
-                }
-            },
+            _ => {}
         }
     }
     println!("SALIO PIBE");
@@ -110,15 +109,15 @@ pub fn pull_sample(appsink: &AppSink, tx: Sender<Vec<u8>>) -> Result<(), Error> 
 /// # Return
 /// Result containing `Ok(())` on success. Error on error.
 pub fn push_sample(appsrc: &AppSrc, rx: &Receiver<Vec<u8>>) -> Result<(), Error> {
-    let frame = match rx.try_recv() {
+    let frame = match rx.recv() {
         Ok(frame) => frame,
-        Err(e) => return Ok(()),
+        Err(e) => return Err(Error::new(io::ErrorKind::Other, "Error pushing buffer")),
     };
 
     let buffer = gstreamer::Buffer::from_slice(frame);
 
-    if let Err(e) = appsrc.push_buffer(buffer){
-        return Err(Error::new(io::ErrorKind::Other, "Error pushing buffer"))
+    if let Err(e) = appsrc.push_buffer(buffer) {
+        return Err(Error::new(io::ErrorKind::Other, "Error pushing buffer"));
     };
 
     Ok(())

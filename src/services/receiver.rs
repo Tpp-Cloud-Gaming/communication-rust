@@ -38,7 +38,7 @@ impl ReceiverSide {
 
         let peer_connection = comunication.get_peer();
 
-        let barrier = Arc::new(Barrier::new(2));
+        let barrier = Arc::new(Barrier::new(3));
         let barrier_clone = barrier.clone();
         // Start mosue and keyboard capture
         let pc_cpy = peer_connection.clone();
@@ -78,8 +78,15 @@ impl ReceiverSide {
             mpsc::channel();
 
         let mut shutdown_audio = shutdown.clone();
+        let barrier_clone_player = barrier.clone();
         tokio::spawn(async move {
-            start_player(rx_video, rx_audio, &mut shutdown_audio).await;
+            start_player(
+                rx_video,
+                rx_audio,
+                &mut shutdown_audio,
+                barrier_clone_player,
+            )
+            .await;
             println!("SALGO DEL START_PLAYER");
         });
 

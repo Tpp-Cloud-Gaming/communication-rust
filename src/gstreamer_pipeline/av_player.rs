@@ -1,6 +1,11 @@
-use std::{collections::HashMap, io::Error, sync::mpsc::Receiver};
+use std::{
+    collections::HashMap,
+    io::Error,
+    sync::{mpsc::Receiver, Arc},
+};
 
 use gstreamer::{glib, prelude::*, Caps, Element};
+use tokio::sync::Barrier;
 use winapi::um::winuser::ShowCursor;
 
 use crate::{
@@ -25,7 +30,9 @@ pub async fn start_player(
     rx_video: Receiver<Vec<u8>>,
     rx_audio: Receiver<Vec<u8>>,
     shutdown: &mut shutdown::Shutdown,
+    barrier: Arc<Barrier>,
 ) {
+    barrier.wait().await;
     shutdown.add_task("Start player").await;
 
     // Create the caps

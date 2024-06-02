@@ -32,7 +32,6 @@ impl ReceiverSide {
         let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
         ws.init_client(client_name, offerer_name, game_name).await?;
 
-        env_logger::builder().format_target(false).init();
         let shutdown = Shutdown::new();
 
         let comunication = Communication::new(STUN_ADRESS.to_owned()).await?;

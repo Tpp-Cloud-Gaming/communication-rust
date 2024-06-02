@@ -38,7 +38,7 @@ impl ReceiverSide {
 
         let peer_connection = comunication.get_peer();
 
-        let barrier = Arc::new(Barrier::new(5));
+        let barrier = Arc::new(Barrier::new(3));
         let barrier_clone = barrier.clone();
         // Start mosue and keyboard capture
         let pc_cpy = peer_connection.clone();
@@ -209,22 +209,24 @@ fn set_on_track_handler(
             let tx_audio_cpy = tx_audio.clone();
             let mut shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
-                barrier_audio.wait().await;
-                println!("RECEIVER | Got OPUS Track");
                 tokio::spawn(async move {
+                    //println!("Llegue a la barrier de audio");
+                    //barrier_audio.wait().await;
+                    println!("RECEIVER | Got OPUS Track");
                     let _ = read_audio_track(track, tx_audio_cpy, &mut shutdown_cpy).await;
                 });
             });
         };
-
+        let barrier_video = barrier.clone();
         // Check if is a audio track
         if mime_type == MIME_TYPE_H264.to_lowercase() {
             let tx_video_cpy = tx_video.clone();
             let mut shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
-                barrier_audio.wait().await;
-                println!("RECEIVER | Got H264 Track");
                 tokio::spawn(async move {
+                    //println!("Llegue a la barrier de video");
+                    //barrier_video.wait().await;
+                    println!("RECEIVER | Got H264 Track");
                     let _ = read_video_track(track, tx_video_cpy, &mut shutdown_cpy).await;
                 });
             });

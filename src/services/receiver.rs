@@ -71,11 +71,15 @@ impl ReceiverSide {
         });
 
         // Create video frame channels
-        let (tx_video, rx_video): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) =
-            mpsc::channel();
+        let (tx_video, rx_video): (
+            mpsc::Sender<(bool, Vec<u8>)>,
+            mpsc::Receiver<(bool, Vec<u8>)>,
+        ) = mpsc::channel();
 
-        let (tx_audio, rx_audio): (mpsc::Sender<Vec<u8>>, mpsc::Receiver<Vec<u8>>) =
-            mpsc::channel();
+        let (tx_audio, rx_audio): (
+            mpsc::Sender<(bool, Vec<u8>)>,
+            mpsc::Receiver<(bool, Vec<u8>)>,
+        ) = mpsc::channel();
 
         let mut shutdown_audio = shutdown.clone();
         let barrier_clone_player = barrier.clone();
@@ -185,8 +189,8 @@ impl ReceiverSide {
 /// * `shutdown` -  Used for graceful shutdown.
 fn set_on_track_handler(
     peer_connection: &Arc<RTCPeerConnection>,
-    tx_audio: mpsc::Sender<Vec<u8>>,
-    tx_video: mpsc::Sender<Vec<u8>>,
+    tx_audio: mpsc::Sender<(bool, Vec<u8>)>,
+    tx_video: mpsc::Sender<(bool, Vec<u8>)>,
     shutdown: shutdown::Shutdown,
 ) {
     peer_connection.on_track(Box::new(move |track, _, _| {
@@ -233,7 +237,7 @@ fn set_on_track_handler(
 /// Result containing `Ok(())` on success. Error on error.
 async fn read_audio_track(
     track: Arc<TrackRemote>,
-    tx: mpsc::Sender<Vec<u8>>,
+    tx: mpsc::Sender<(bool, Vec<u8>)>,
     shutdown: &mut shutdown::Shutdown,
 ) -> Result<(), Error> {
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
@@ -244,18 +248,23 @@ async fn read_audio_track(
             result = track.read_rtp() => {
                 if let Ok((rtp_packet, _)) = result {
                     let value = rtp_packet.payload.to_vec();
-                    match tx.send(value){
+                    match tx.send((false,value)){
                         Ok(_) => {}
                         Err(e) => {
                             log::error!("RECEIVER | Error sending audio packet to channel: {e}");
+                            //TODO: mejorar codigo repetido y unwrap
+                            tx.send((true, vec![])).unwrap();
                             shutdown.notify_error(false, "Sending audio packet").await;
+                            drop(tx);
                             return Err(Error::new(ErrorKind::Other, "Error sending audio packet to channel"));
                         }
                     }
 
                 }else if error_tracker.increment_with_error(){
                         log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
+                        tx.send((true, vec![])).unwrap();
                         shutdown.notify_error(false,"Error sending rtp packet").await;
+                        drop(tx);
                         return Err(Error::new(ErrorKind::Other, "Error reading RTP packet"));
                 }else{
                         log::warn!("RECEIVER | Error reading RTP packet");
@@ -267,6 +276,7 @@ async fn read_audio_track(
             }
             _= shutdown.wait_for_error() => {
                 log::info!("READ AUDIO TRACK | Shutdown received");
+                tx.send((true, vec![])).unwrap();
                 drop(tx);
                 return Ok(());
             }
@@ -286,7 +296,7 @@ async fn read_audio_track(
 /// Result containing `Ok(())` on success. Error on error.
 async fn read_video_track(
     track: Arc<TrackRemote>,
-    tx: mpsc::Sender<Vec<u8>>,
+    tx: mpsc::Sender<(bool, Vec<u8>)>,
     shutdown: &mut shutdown::Shutdown,
 ) -> Result<(), Error> {
     let mut error_tracker = ErrorTracker::new(READ_TRACK_THRESHOLD, READ_TRACK_LIMIT);
@@ -299,11 +309,14 @@ async fn read_video_track(
             result = track.read(&mut buff) => {
                 if let Ok((_rtp_packet, _)) = result {
 
-                    match tx.send(buff.to_vec()){
+                    match tx.send((false, buff.to_vec())){
                         Ok(_) => {}
                         Err(e) => {
                             log::error!("RECEIVER | Error sending video packet to channel: {e}");
                             shutdown.notify_error(false, "read video track sending").await;
+                            //TODO: mejorar codigo repetido y unwrap
+                            tx.send((true, vec![])).unwrap();
+                            drop(tx);
                             return Err(Error::new(ErrorKind::Other, "Error sending video packet to channel"));
                         }
 
@@ -312,6 +325,8 @@ async fn read_video_track(
                 }else if error_tracker.increment_with_error(){
                         log::error!("RECEIVER | Max Attemps | Error reading RTP packet");
                         shutdown.notify_error(false, "read video track max attemps").await;
+                        tx.send((true, vec![])).unwrap();
+                        drop(tx);
                         return Err(Error::new(ErrorKind::Other, "Error reading RTP packet"));
                 }else{
                         log::warn!("RECEIVER | Error reading RTP packet");
@@ -323,6 +338,7 @@ async fn read_video_track(
             }
             _= shutdown.wait_for_error() => {
                 log::info!("READ VIDEO TRACK | Shutdown received");
+                tx.send((true, vec![])).unwrap();
                 drop(tx);
                 return Ok(());
             }

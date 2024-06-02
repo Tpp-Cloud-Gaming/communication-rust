@@ -108,16 +108,24 @@ pub fn pull_sample(appsink: &AppSink, tx: Sender<Vec<u8>>) -> Result<(), Error> 
 ///
 /// # Return
 /// Result containing `Ok(())` on success. Error on error.
-pub fn push_sample(appsrc: &AppSrc, rx: &Receiver<Vec<u8>>) -> Result<(), Error> {
-    let frame = match rx.recv() {
-        Ok(frame) => frame,
+pub fn push_sample(appsrc: &AppSrc, rx: &Receiver<(bool, Vec<u8>)>) -> Result<(), Error> {
+    match rx.recv() {
+        Ok(data) => {
+            if data.0 == true {
+                log::error!("PUSH SAMPLE | Shutdown message received");
+                return Err(Error::new(
+                    io::ErrorKind::Other,
+                    "PUSH SAMPLE | Shutdown message received",
+                ));
+            }
+            let frame = data.1;
+            let buffer = gstreamer::Buffer::from_slice(frame);
+
+            if let Err(e) = appsrc.push_buffer(buffer) {
+                return Err(Error::new(io::ErrorKind::Other, "Error pushing buffer"));
+            };
+        }
         Err(e) => return Err(Error::new(io::ErrorKind::Other, "Error pushing buffer")),
-    };
-
-    let buffer = gstreamer::Buffer::from_slice(frame);
-
-    if let Err(e) = appsrc.push_buffer(buffer) {
-        return Err(Error::new(io::ErrorKind::Other, "Error pushing buffer"));
     };
 
     Ok(())

@@ -27,8 +27,8 @@ pub const PIPELINE_NAME: &str = "AUDIO VIDEO PLAYER";
 /// * `rx_audio` - A Receiver for receiving audio frames.
 /// * `shutdown` - A shutdown handle for managing the finalization of the thread.
 pub async fn start_player(
-    rx_video: Receiver<Vec<u8>>,
-    rx_audio: Receiver<Vec<u8>>,
+    rx_video: Receiver<(bool, Vec<u8>)>,
+    rx_audio: Receiver<(bool, Vec<u8>)>,
     shutdown: &mut shutdown::Shutdown,
     barrier: Arc<Barrier>,
 ) {
@@ -140,8 +140,8 @@ fn create_pipeline(
     audio_elements: HashMap<&str, Element>,
     video_caps: Caps,
     audio_caps: Caps,
-    rx_video: Receiver<Vec<u8>>,
-    rx_audio: Receiver<Vec<u8>>,
+    rx_video: Receiver<(bool, Vec<u8>)>,
+    rx_audio: Receiver<(bool, Vec<u8>)>,
     shutdown: shutdown::Shutdown,
 ) -> Result<gstreamer::Pipeline, Error> {
     let video_source = gstreamer_app::AppSrc::builder()

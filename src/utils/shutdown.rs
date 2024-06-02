@@ -56,18 +56,22 @@ impl Shutdown {
 
             if !main_task {
                 *counter -= 1;
+                println!("SHUTDOWN COUNT: {}", *counter);
             }
             
             if *counter == 0 {
         
                 self.shutdown_notifier.add_permits(1);
             }
-
+            
             let mut notifier_active = self.notifier_active.lock().await;
+            log::error!("Shutdown | Notifier active {:?}", *notifier_active);
             if !(*notifier_active) {
+                log::error!("Shutdown | Permits added {:?}", counter);
                 self.error_notifier.add_permits(*counter as usize);
                 *notifier_active = true;
             }
+            log::error!("Shutdown | Saliendo de notufy error");
         }
         // if main_task {
         //     _ = self.wait_for_shutdown().await;

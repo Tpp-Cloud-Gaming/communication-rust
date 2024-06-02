@@ -76,7 +76,7 @@ pub fn initialize_game(game_path: &str) -> Result<(), Error> {
     }
 }
 
-pub fn get_handler(target_path: &str) -> Result<u64, Error> {
+pub fn get_handler(target_path: &str) -> Result<(u64,u32), Error> {
     let mut found_process: Option<ProcessInfo> = None;
     let game_path: String = target_path.replace("\\\\", "\\");
     sleep(Duration::from_millis(20000));
@@ -106,7 +106,7 @@ pub fn get_handler(target_path: &str) -> Result<u64, Error> {
     for _ in 0..HANDLER_RETRIES {
         if let Some(process) = &found_process {
             match get_hwnd_by_pid(process.pid) {
-                Some(hwnd) => return Ok(hwnd as u64),
+                Some(hwnd) => return Ok((hwnd as u64, process.pid)),
                 None => (),
             }
         }

@@ -204,24 +204,43 @@ pub async fn start_capture(
     }
 
     let pipeline_cpy = pipeline.clone();
-    let shutdown_cpy = shutdown.clone();
+    let mut shutdown_cpy = shutdown.clone();
+
+    let handle_read_bus = tokio::task::spawn(async move {
+        read_bus(pipeline_cpy, &mut shutdown_cpy).await;
+    });
+
     tokio::select! {
         _ = shutdown.wait_for_error() => {
-            log::error!("CAPTURE | ERROR NOTIFIED");
+            log::info!("PLAYER | Shutdown received");
         },
-        _ = tokio::spawn(async move {
-            read_bus(pipeline_cpy, shutdown_cpy).await;
-        }) => {
-            log::debug!("CAPTURE | BUS READ FINISHED");
-        }
     }
-    log::error!("CAPTURE | About to set null state");
+
     if let Err(e) = pipeline.set_state(gstreamer::State::Null) {
-        log::error!(
-            "CAPTURE | Failed to set the pipeline to the `Null` state: {}",
-            e.to_string()
-        );
+        log::error!("PLAYER | Failed to set pipeline to null: {}", e);
+    } else {
+        println!("SE CAMBIA EL ESTADO A NULL");
     }
+
+    handle_read_bus.abort();
+
+    // tokio::select! {
+    //     _ = shutdown.wait_for_error() => {
+    //         log::error!("CAPTURE | ERROR NOTIFIED");
+    //     },
+    //     _ = tokio::spawn(async move {
+    //         read_bus(pipeline_cpy, shutdown_cpy).await;
+    //     }) => {
+    //         log::debug!("CAPTURE | BUS READ FINISHED");
+    //     }
+    // }
+    // log::error!("CAPTURE | About to set null state");
+    // if let Err(e) = pipeline.set_state(gstreamer::State::Null) {
+    //     log::error!(
+    //         "CAPTURE | Failed to set the pipeline to the `Null` state: {}",
+    //         e.to_string()
+    //     );
+    // }
 }
 
 

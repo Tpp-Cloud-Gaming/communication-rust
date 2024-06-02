@@ -75,10 +75,10 @@ pub async fn start_player(rx_video: Receiver<Vec<u8>>, rx_audio: Receiver<Vec<u8
     }
 
     let pipeline_cpy = pipeline.clone();
-    let shutdown_cpy = shutdown.clone();
+    let mut  shutdown_cpy = shutdown.clone();
 
     let handle_read_bus = tokio::task::spawn(async move {
-        read_bus(pipeline_cpy, shutdown_cpy).await;
+        read_bus(pipeline_cpy, &mut shutdown_cpy).await;
     });
 
     tokio::select! {

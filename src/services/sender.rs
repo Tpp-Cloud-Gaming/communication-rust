@@ -27,6 +27,13 @@ use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 
+
+//use std::process::Command;
+use winapi::um::processthreadsapi::OpenProcess;
+use winapi::um::winnt::PROCESS_TERMINATE;
+use winapi::um::processthreadsapi::TerminateProcess;
+use std::ptr::null_mut;
+
 use crate::utils::webrtc_const::{
     AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_TRACK_ID, SEND_TRACK_LIMIT, SEND_TRACK_THRESHOLD,
     STREAM_TRACK_ID, STUN_ADRESS, VIDEO_TRACK_ID,
@@ -36,14 +43,14 @@ use crate::websocketprotocol::websocketprotocol::WsProtocol;
 
 pub struct SenderSide {}
 impl SenderSide {
-    pub async fn new(offerer_name: &str) -> Result<(), Error> {
+    pub async fn new(offerer_name: &str, ws: &mut WsProtocol) -> Result<(), Error> {
         //Start log
-        env_logger::builder().format_target(false).init();
+        
         // Start shutdown
         let shutdown = Shutdown::new();
 
         // Wait for client to request a connection
-        let mut ws = WsProtocol::ws_protocol().await?;
+        //let mut ws = WsProtocol::ws_protocol().await?;
         ws.init_offer(offerer_name).await?;
         let client_info = ws.wait_for_game_solicitude().await?;
 
@@ -65,8 +72,8 @@ impl SenderSide {
         let comunication =
             check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
 
-        let hwnd: u64 = match get_handler(game_path) {
-            Ok(hwnd) => hwnd,
+        let (hwnd, pid) = match get_handler(game_path) {
+            Ok((hwnd,pid)) => (hwnd,pid),
             Err(_) => {
                 shutdown.notify_error(true, "get_handler").await;
                 return Err(Error::new(ErrorKind::Other, "Error getting handler"));
@@ -77,6 +84,7 @@ impl SenderSide {
         let mut shutdown_capture = shutdown.clone();
 
         let barrier_video = barrier.clone();
+        
         tokio::spawn(async move {
             start_capture(
                 tx_video,
@@ -180,13 +188,14 @@ impl SenderSide {
                 log::info!("SENDER | Received done signal");
             }
             _ = tokio::signal::ctrl_c() => {
-                println!();
+                println!("Ended by ctrl c");
             }
             _ = shutdown.wait_for_shutdown() => {
                 log::error!("RECEIVER | Error notifier signal");
-                return Ok(())
             }
         };
+
+        kill_process(pid)?;
 
         if pc.close().await.is_err() {
             return Err(Error::new(
@@ -338,11 +347,13 @@ fn set_peer_events(
         if s == RTCPeerConnectionState::Disconnected {
             log::error!("SENDER | Peer connection state: Disconnected");
             let shutdown_cpy = shutdown.clone();
+            //let _ = done_tx.try_send(());
             return Box::pin(async move {
                 shutdown_cpy
                     .notify_error(true, "Peer connection disconnected")
                     .await;
                 log::error!("SENDER | Notify error sended");
+                
             });
         }
 
@@ -381,7 +392,7 @@ async fn read_rtcp(shutdown: &mut shutdown::Shutdown, rtp_sender: Arc<RTCRtpSend
 
             }
             _ = shutdown.wait_for_error() => {
-                log::info!("SENDER | Shutdown signal received");
+                log::error!("SENDER | Shutdown signal received");
                 break;
             }
         }
@@ -465,6 +476,7 @@ async fn start_audio_sending(
         };
 
         if shutdown.check_for_error().await {
+            log::error!("SENDER | Start audio sending check for error");
             return;
         }
     }
@@ -525,8 +537,8 @@ async fn start_video_sending(
             }
             Err(_) => {
                 if error_tracker.increment_with_error() {
-                    //log::error!("SENDER | Max attemps | Error receiving video data |",);
-                    //shutdown.notify_error(false,"Error max attemps on video sending" ).await;
+                    log::error!("SENDER | Max attemps | Error receiving video data |",);
+                    shutdown.notify_error(false,"Error max attemps on video sending" ).await;
                     return;
                 } else {
                     log::info!("SENDER | Error receiving video data |");
@@ -537,8 +549,9 @@ async fn start_video_sending(
 
         //let sample_duration =
         //    Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
-
+        
         if shutdown.check_for_error().await {
+            log::error!("SENDER | Start video sending check for error");
             return;
         }
     }
@@ -556,10 +569,12 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, _shutdown: shutdown
         let d_label = d.label().to_owned();
 
         if d_label == MOUSE_CHANNEL_LABEL {
+            
             Box::pin(async {
                 MouseController::start_mouse_controller(d);
             })
         } else if d_label == KEYBOARD_CHANNEL_LABEL {
+            
             Box::pin(async {
                 ButtonController::start_keyboard_controller(d);
             })
@@ -569,4 +584,20 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, _shutdown: shutdown
             })
         }
     }));
+}
+
+
+fn kill_process(pid: u32) -> std::io::Result<()> {
+    unsafe{
+
+        let h_process = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if h_process.is_null() {
+            println!("Failed to open the process.");
+            return Ok(());
+        }
+        
+        let result = TerminateProcess(h_process, 1);
+    };
+
+    Ok(())
 }

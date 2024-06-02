@@ -13,7 +13,7 @@ use tokio::{runtime::Runtime, sync::mpsc::Sender};
 ///
 /// * `pipeline` - A gstreamer pipeline
 /// * `shutdown` - A shutdown handle used for graceful shutdown
-pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
+pub async fn read_bus(pipeline: Pipeline, shutdown: &mut shutdown::Shutdown) {
     // Wait until error or EOS
     let pipeline_name = pipeline.name();
 
@@ -25,10 +25,10 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
             return;
         }
     };
+    shutdown.add_task("Read bus").await;
 
     for msg in bus.iter_timed(gstreamer::ClockTime::NONE) {
         use gstreamer::MessageView;
-
         match msg.view() {
             MessageView::Error(err) => {
                 log::error!(
@@ -52,7 +52,12 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: shutdown::Shutdown) {
                 log::info!("{pipeline_name} | End of stream received");
                 break;
             }
-            _ => (),
+            _ => {
+                if shutdown.check_for_error().await {
+                    println!("Enter in check for error");
+                    break;
+                }
+            },
         }
     }
     println!("SALIO PIBE");

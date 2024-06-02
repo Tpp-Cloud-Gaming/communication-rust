@@ -12,6 +12,9 @@ pub mod websocketprotocol;
 use crate::front_connection::front_protocol::{ClientType, FrontConnection};
 use crate::services::receiver::ReceiverSide;
 use crate::services::sender::SenderSide;
+use crate::websocketprotocol::websocketprotocol::WsProtocol;
+use std::thread::sleep;
+use std::time::Duration;
 
 use tokio::runtime::Handle;
 
@@ -19,13 +22,14 @@ use std::io::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-
+    env_logger::builder().format_target(false).init();
     // Initialize GStreamer
     gstreamer::init().unwrap();
+    let mut ws = WsProtocol::ws_protocol().await?;
 
     loop {
+        println!("Ready to start");
         let mut front_connection = FrontConnection::new().await?;
-
         let client = front_connection.waiting_to_start().await?;
 
         match client.client_type {
@@ -44,8 +48,13 @@ async fn main() -> Result<(), Error> {
                 break;
             }
             ClientType::SENDER => {
-                if let Err(_) = SenderSide::new(&client.username).await {
-                    println!("Connection Missed. \nRestarting...");
+                if let Err(_) = SenderSide::new(&client.username, &mut ws).await {
+                    //break;
+                    continue;
+                    //println!("Connection Missed. \nRestarting...");
+                } else{
+                    //break;
+                    continue;
                 }
             }
         }

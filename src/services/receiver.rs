@@ -38,7 +38,7 @@ impl ReceiverSide {
 
         let peer_connection = comunication.get_peer();
 
-        let barrier = Arc::new(Barrier::new(3));
+        let barrier = Arc::new(Barrier::new(5));
         let barrier_clone = barrier.clone();
         // Start mosue and keyboard capture
         let pc_cpy = peer_connection.clone();
@@ -97,7 +97,13 @@ impl ReceiverSide {
         // Set a handler for when a new remote track starts, this handler saves buffers to disk as
         // an ivf file, since we could have multiple video tracks we provide a counter.
         // In your application this is where you would handle/process video
-        set_on_track_handler(&peer_connection, tx_audio, tx_video, shutdown.clone());
+        set_on_track_handler(
+            &peer_connection,
+            tx_audio,
+            tx_video,
+            shutdown.clone(),
+            barrier.clone(),
+        );
 
         channel_handler(&peer_connection, shutdown.clone());
 
@@ -192,16 +198,18 @@ fn set_on_track_handler(
     tx_audio: mpsc::Sender<(bool, Vec<u8>)>,
     tx_video: mpsc::Sender<(bool, Vec<u8>)>,
     shutdown: shutdown::Shutdown,
+    barrier: Arc<Barrier>,
 ) {
     peer_connection.on_track(Box::new(move |track, _, _| {
         let codec = track.codec();
         let mime_type = codec.capability.mime_type.to_lowercase();
-
+        let barrier_audio = barrier.clone();
         // Check if is a audio track
         if mime_type == MIME_TYPE_OPUS.to_lowercase() {
             let tx_audio_cpy = tx_audio.clone();
             let mut shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
+                barrier_audio.wait().await;
                 println!("RECEIVER | Got OPUS Track");
                 tokio::spawn(async move {
                     let _ = read_audio_track(track, tx_audio_cpy, &mut shutdown_cpy).await;
@@ -214,6 +222,7 @@ fn set_on_track_handler(
             let tx_video_cpy = tx_video.clone();
             let mut shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
+                barrier_audio.wait().await;
                 println!("RECEIVER | Got H264 Track");
                 tokio::spawn(async move {
                     let _ = read_video_track(track, tx_video_cpy, &mut shutdown_cpy).await;

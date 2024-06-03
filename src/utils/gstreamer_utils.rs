@@ -71,7 +71,7 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: &mut shutdown::Shutdown) {
 ///
 /// # Return
 /// Result containing `Ok(())` on success. Error on error.
-pub fn pull_sample(appsink: &AppSink, tx: Sender<Vec<u8>>) -> Result<(), Error> {
+pub async fn pull_sample(appsink: &AppSink, tx: Sender<Vec<u8>>) -> Result<(), Error> {
     // Pull the sample in question out of the appsink's buffer.
     let sample = appsink
         .pull_sample()
@@ -86,15 +86,15 @@ pub fn pull_sample(appsink: &AppSink, tx: Sender<Vec<u8>>) -> Result<(), Error> 
         .map_err(|_| Error::new(io::ErrorKind::Other, "Error reading buffer"))?;
 
     let samples = map.as_slice();
-    let rt =
-        Runtime::new().map_err(|_| Error::new(io::ErrorKind::Other, "Error creating Runtime"))?;
+    //let rt =
+    //    Runtime::new().map_err(|_| Error::new(io::ErrorKind::Other, "Error creating Runtime"))?;
 
-    rt.block_on(async {
+    //rt.block_on(async {
         match tx.send(samples.to_vec()).await {
             Ok(result) => result,
             Err(_) => log::error!("APPSINK | Error sending sample"),
         };
-    });
+    //});
 
     Ok(())
 }

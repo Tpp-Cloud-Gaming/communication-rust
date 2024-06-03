@@ -229,17 +229,7 @@ fn create_pipeline(
         println!("salgo del loop de video PIBE");
     });
 
-    // video_source.set_callbacks(
-    //     gstreamer_app::AppSrcCallbacks::builder()
-    //         .need_data(move |appsrc, _| {
-    //             push_sample(appsrc, &rx_video)
-    //                 .map_err(|err| {
-    //                     log::error!("VIDEO PLAYER | {}", err);
-    //                 })
-    //                 .unwrap();
-    //         })
-    //         .build(),
-    // );
+    
 
     let mut shutdown_cpy = shutdown.clone();
     tokio::spawn(async move {
@@ -262,17 +252,7 @@ fn create_pipeline(
         println!("salgo del loop de audio PIBE");
     });
 
-    // audio_source.set_callbacks(
-    //     gstreamer_app::AppSrcCallbacks::builder()
-    //         .need_data(move |appsrc, _| {
-    //             push_sample(appsrc, &rx_audio)
-    //                 .map_err(|err| {
-    //                     log::error!("AUDIO PLAYER | {}", err);
-    //                 })
-    //                 .unwrap();
-    //         })
-    //         .build(),
-    // );
+    
 
     let videosink = &video_elements["sink"];
     videosink.connect_closure(

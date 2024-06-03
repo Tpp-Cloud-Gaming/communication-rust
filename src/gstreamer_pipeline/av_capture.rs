@@ -96,40 +96,72 @@ fn create_pipeline(
         return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
     }
 
-    video_sink.set_callbacks(
-        gstreamer_app::AppSinkCallbacks::builder()
-            .new_sample(
-                move |appsink| match pull_sample(appsink, tx_video.clone()) {
-                    Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
-                    Err(err) => {
-                        log::error!("VIDEO CAPTURE | {}", err);
-                        let shutdown_cpy = shutdown.clone();
-                        let _ = Box::pin(async move {    
-                            shutdown_cpy.notify_error(false, "Video capture Set callbacks").await;
-                            log::error!("SENDER | Notify error sended");
-                            
-                        });
-                        Err(gstreamer::FlowError::Error)
-                    }
-                },
-            )
-            .build(),
-    );
+    let mut shutdown_clone = shutdown.clone();
+    tokio::spawn(async move {
+        shutdown_clone.add_task("Video pull sample").await;
+        loop {
+            if let Err(_e) = pull_sample(&video_sink, tx_video.clone()).await.map_err(|err| {
+                log::error!("VIDEO CAPTURE | {}", err);
+            }) {
+                shutdown_clone
+                    .notify_error(false, "failed pushing video sample")
+                    .await;
+                log::error!("RECEIVER | Failed pushing video sample");
+                break;
+            }
+        }
+        println!("salgo del loop de video PIBE");
 
-    // Otra opcion podria ser: pay (pad probe) fakesink
-    audio_sink.set_callbacks(
-        gstreamer_app::AppSinkCallbacks::builder()
-            .new_sample(
-                move |appsink| match pull_sample(appsink, tx_audio.clone()) {
-                    Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
-                    Err(err) => {
-                        log::error!("AUDIO CAPTURE | {}", err);
-                        Err(gstreamer::FlowError::Error)
-                    }
-                },
-            )
-            .build(),
-    );
+    });
+    // video_sink.set_callbacks(
+    //     gstreamer_app::AppSinkCallbacks::builder()
+    //         .new_sample(
+    //             move |appsink| match pull_sample(appsink, tx_video.clone()) {
+    //                 Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
+    //                 Err(err) => {
+    //                     log::error!("VIDEO CAPTURE | {}", err);
+    //                     let shutdown_cpy = shutdown.clone();
+    //                     let _ = Box::pin(async move {    
+    //                         shutdown_cpy.notify_error(false, "Video capture Set callbacks").await;
+    //                         log::error!("SENDER | Notify error sended");
+                            
+    //                     });
+    //                     Err(gstreamer::FlowError::Error)
+    //                 }
+    //             },
+    //         )
+    //         .build(),
+    // );
+
+    let mut shutdown_clone = shutdown.clone();
+    tokio::spawn(async move {
+        shutdown_clone.add_task("Audio pull sample").await;
+        loop {
+            if let Err(_e) = pull_sample(&audio_sink, tx_audio.clone()).await.map_err(|err| {
+                log::error!("AUDIO CAPTURE | {}", err);
+            }) {
+                shutdown_clone
+                    .notify_error(false, "failed pushing audio sample")
+                    .await;
+                log::error!("RECEIVER | Failed pushing audio sample");
+                break;
+            }
+        }
+        println!("salgo del loop de audio PIBE");
+    });
+    // audio_sink.set_callbacks(
+    //     gstreamer_app::AppSinkCallbacks::builder()
+    //         .new_sample(
+    //             move |appsink| match pull_sample(appsink, tx_audio.clone()) {
+    //                 Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
+    //                 Err(err) => {
+    //                     log::error!("AUDIO CAPTURE | {}", err);
+    //                     Err(gstreamer::FlowError::Error)
+    //                 }
+    //             },
+    //         )
+    //         .build(),
+    // );
 
 
     Ok(pipeline)

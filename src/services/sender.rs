@@ -27,12 +27,10 @@ use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 
-
 //use std::process::Command;
 use winapi::um::processthreadsapi::OpenProcess;
-use winapi::um::winnt::PROCESS_TERMINATE;
 use winapi::um::processthreadsapi::TerminateProcess;
-use std::ptr::null_mut;
+use winapi::um::winnt::PROCESS_TERMINATE;
 
 use crate::utils::webrtc_const::{
     AUDIO_CHANNELS, AUDIO_SAMPLE_RATE, AUDIO_TRACK_ID, SEND_TRACK_LIMIT, SEND_TRACK_THRESHOLD,
@@ -41,11 +39,13 @@ use crate::utils::webrtc_const::{
 use crate::webrtcommunication::latency::Latency;
 use crate::websocketprotocol::websocketprotocol::WsProtocol;
 
+const LATENCY_CHECK: bool = false;
+
 pub struct SenderSide {}
 impl SenderSide {
     pub async fn new(offerer_name: &str, ws: &mut WsProtocol) -> Result<(), Error> {
         //Start log
-        
+
         // Start shutdown
         let shutdown = Shutdown::new();
 
@@ -73,7 +73,7 @@ impl SenderSide {
             check_error(Communication::new(STUN_ADRESS.to_owned()).await, &shutdown).await?;
 
         let (hwnd, pid) = match get_handler(game_path) {
-            Ok((hwnd,pid)) => (hwnd,pid),
+            Ok((hwnd, pid)) => (hwnd, pid),
             Err(_) => {
                 shutdown.notify_error(true, "get_handler").await;
                 return Err(Error::new(ErrorKind::Other, "Error getting handler"));
@@ -84,7 +84,7 @@ impl SenderSide {
         let mut shutdown_capture = shutdown.clone();
 
         let barrier_video = barrier.clone();
-        
+
         tokio::spawn(async move {
             start_capture(
                 tx_video,
@@ -107,7 +107,9 @@ impl SenderSide {
             create_track_rtp(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
 
         // Start the latency measurement
-        check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
+        if (LATENCY_CHECK) {
+            check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
+        }
 
         channel_handler(&pc, shutdown.clone());
 
@@ -353,7 +355,6 @@ fn set_peer_events(
                     .notify_error(true, "Peer connection disconnected")
                     .await;
                 log::error!("SENDER | Notify error sended");
-                
             });
         }
 
@@ -538,7 +539,9 @@ async fn start_video_sending(
             Err(_) => {
                 if error_tracker.increment_with_error() {
                     log::error!("SENDER | Max attemps | Error receiving video data |",);
-                    shutdown.notify_error(false,"Error max attemps on video sending" ).await;
+                    shutdown
+                        .notify_error(false, "Error max attemps on video sending")
+                        .await;
                     return;
                 } else {
                     log::info!("SENDER | Error receiving video data |");
@@ -549,7 +552,7 @@ async fn start_video_sending(
 
         //let sample_duration =
         //    Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
-        
+
         if shutdown.check_for_error().await {
             log::error!("SENDER | Start video sending check for error");
             return;
@@ -569,12 +572,10 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, _shutdown: shutdown
         let d_label = d.label().to_owned();
 
         if d_label == MOUSE_CHANNEL_LABEL {
-            
             Box::pin(async {
                 MouseController::start_mouse_controller(d);
             })
         } else if d_label == KEYBOARD_CHANNEL_LABEL {
-            
             Box::pin(async {
                 ButtonController::start_keyboard_controller(d);
             })
@@ -586,16 +587,14 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, _shutdown: shutdown
     }));
 }
 
-
 fn kill_process(pid: u32) -> std::io::Result<()> {
-    unsafe{
-
+    unsafe {
         let h_process = OpenProcess(PROCESS_TERMINATE, 0, pid);
         if h_process.is_null() {
             println!("Failed to open the process.");
             return Ok(());
         }
-        
+
         let result = TerminateProcess(h_process, 1);
     };
 

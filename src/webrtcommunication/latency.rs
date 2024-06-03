@@ -1,7 +1,8 @@
 use sntpc::NtpResult;
+use std::io::Write;
 use std::io::{Error, ErrorKind};
 use std::net::UdpSocket;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
@@ -79,9 +80,26 @@ impl Latency {
         }));
 
         let socket = create_socket(UDP_SOCKET_ADDR, Duration::from_secs(UDP_SOCKET_TIMEOUT))?;
-        //TODO: Retornar errores ?
+
+        // Create the log file
+        let now = chrono::Local::now();
+        let date = now.format("%Y-%m-%d_%H-%M-%S").to_string();
+        let mut file = match std::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(format!("data/{}.txt", date))
+        {
+            Ok(f) => f,
+            Err(e) => {
+                log::error!("LATENCY | Error opening file: {:?}", e);
+                return Err(Error::new(ErrorKind::Other, "Error opening file"));
+            }
+        };
+
         // Register text message handling
+        let file = Arc::new(Mutex::new(file));
         ch.on_message(Box::new(move |msg: DataChannelMessage| {
+            let file = Arc::clone(&file);
             let socket_cpy = match socket.try_clone() {
                 Ok(s) => s,
                 Err(e) => {
@@ -119,11 +137,27 @@ impl Latency {
                     Some(t) => t,
                 };
                 log::info!("LATENCY CHECK | Difference: {} milliseconds", result);
+                let mut file = file.lock().unwrap();
+                if let Err(_e) = write_in_file(&mut *file, result) {
+                    return;
+                };
             })
         }));
 
         Ok(())
     }
+}
+
+fn write_in_file(file: &mut std::fs::File, latency: u32) -> Result<(), Error> {
+    // Get current date and time
+    let now = chrono::Local::now();
+
+    // Write to the file
+    match writeln!(file, "{},{}", now.to_rfc3339(), latency) {
+        Ok(_) => (),
+        Err(e) => log::error!("LATENCY | Error writing to file: {:?}", e),
+    };
+    return Ok(());
 }
 
 /// Creates a UDP socket binded to the specified address with a read timeout.

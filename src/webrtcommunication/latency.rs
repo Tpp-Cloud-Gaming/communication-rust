@@ -13,6 +13,8 @@ use crate::utils::latency_const::{
     UDP_SOCKET_ADDR, UDP_SOCKET_TIMEOUT,
 };
 
+const LATENCY_CHECK: bool = false;
+
 /// Struct to measure the latency between the peers in the Sender or Receiver side
 ///
 /// Uses a data channel to send the messages and a SNTP client to get the time
@@ -31,10 +33,11 @@ impl Latency {
             }
         };
         log::debug!("LATENCY | Latency Data channel created");
-        let socket = create_socket(UDP_SOCKET_ADDR, Duration::from_secs(UDP_SOCKET_TIMEOUT))?;
-        // Register channel opening handling
-        let d1 = Arc::clone(&latency_channel);
-        latency_channel.on_open(Box::new(move || {
+        if LATENCY_CHECK {
+            let socket = create_socket(UDP_SOCKET_ADDR, Duration::from_secs(UDP_SOCKET_TIMEOUT))?;
+            // Register channel opening handling
+            let d1 = Arc::clone(&latency_channel);
+            latency_channel.on_open(Box::new(move || {
             log::debug!("LATENCY | Data channel '{}'-'{}' open. Random messages will now be sent to any connected DataChannels every {} seconds", d1.label(), d1.id(),LOOP_LATENCY_TIME);
             let d2 = Arc::clone(&d1);
             //TODO: Retornar errores ?
@@ -67,7 +70,8 @@ impl Latency {
                     };
                 }
             })
-        }));
+            }));
+        }
 
         Ok(())
     }
@@ -87,7 +91,7 @@ impl Latency {
         let mut file = match std::fs::OpenOptions::new()
             .append(true)
             .create(true)
-            .open(format!("data/{}.txt", date))
+            .open(format!("{}.txt", date))
         {
             Ok(f) => f,
             Err(e) => {

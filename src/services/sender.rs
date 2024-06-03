@@ -39,8 +39,6 @@ use crate::utils::webrtc_const::{
 use crate::webrtcommunication::latency::Latency;
 use crate::websocketprotocol::websocketprotocol::WsProtocol;
 
-const LATENCY_CHECK: bool = false;
-
 pub struct SenderSide {}
 impl SenderSide {
     pub async fn new(offerer_name: &str, ws: &mut WsProtocol) -> Result<(), Error> {
@@ -107,9 +105,8 @@ impl SenderSide {
             create_track_rtp(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
 
         // Start the latency measurement
-        if (LATENCY_CHECK) {
-            check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
-        }
+
+        check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
 
         channel_handler(&pc, shutdown.clone());
 

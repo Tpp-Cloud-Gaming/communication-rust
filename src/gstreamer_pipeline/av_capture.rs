@@ -1,19 +1,24 @@
 use gstreamer::{prelude::*, Element, Pipeline};
 
 use std::{
-    collections::HashMap, io::{self, Error}, sync::Arc
+    collections::HashMap,
+    io::{self, Error},
+    sync::Arc,
 };
 
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Barrier;
 
-use crate::{sound::audio_capture, utils::{
-    gstreamer_utils::{pull_sample, read_bus},
-    shutdown,
-}, video::{video_capture, video_const::GSTREAMER_FRAMES}};
+use crate::{
+    sound::audio_capture,
+    utils::{
+        gstreamer_utils::{pull_sample, read_bus},
+        shutdown,
+    },
+    video::{video_capture, video_const::GSTREAMER_FRAMES},
+};
 
 pub const PIPELINE_NAME: &str = "AUDIO VIDEO CAPTURE";
-
 
 /// Creates a GStreamer pipeline used for video and audio capture.
 ///
@@ -36,7 +41,7 @@ fn create_pipeline(
     tx_audio: Sender<Vec<u8>>,
     video_caps: gstreamer::Caps,
     audio_caps: gstreamer::Caps,
-    shutdown: shutdown::Shutdown
+    shutdown: shutdown::Shutdown,
 ) -> Result<Pipeline, Error> {
     let video_sink = gstreamer_app::AppSink::builder()
         .caps(&gstreamer::Caps::builder("application/x-rtp").build())
@@ -45,7 +50,6 @@ fn create_pipeline(
     let audio_sink = gstreamer_app::AppSink::builder()
         .caps(&gstreamer::Caps::builder("application/x-rtp").build())
         .build();
-
 
     let pipeline = gstreamer::Pipeline::with_name(PIPELINE_NAME);
 
@@ -96,77 +100,43 @@ fn create_pipeline(
         return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
     }
 
-    let mut shutdown_clone = shutdown.clone();
-    tokio::spawn(async move {
-        shutdown_clone.add_task("Video pull sample").await;
-        loop {
-            if let Err(_e) = pull_sample(&video_sink, tx_video.clone()).await.map_err(|err| {
-                log::error!("VIDEO CAPTURE | {}", err);
-            }) {
-                shutdown_clone
-                    .notify_error(false, "failed pushing video sample")
-                    .await;
-                log::error!("RECEIVER | Failed pushing video sample");
-                break;
-            }
-        }
-        println!("salgo del loop de video PIBE");
+    video_sink.set_callbacks(
+        gstreamer_app::AppSinkCallbacks::builder()
+            .new_sample(
+                move |appsink| match pull_sample(appsink, tx_video.clone()) {
+                    Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
+                    Err(err) => {
+                        log::error!("VIDEO CAPTURE | {}", err);
+                        let shutdown_cpy = shutdown.clone();
+                        let _ = Box::pin(async move {
+                            shutdown_cpy
+                                .notify_error(false, "Video capture Set callbacks")
+                                .await;
+                            log::error!("SENDER | Notify error sended");
+                        });
+                        Err(gstreamer::FlowError::Error)
+                    }
+                },
+            )
+            .build(),
+    );
 
-    });
-    // video_sink.set_callbacks(
-    //     gstreamer_app::AppSinkCallbacks::builder()
-    //         .new_sample(
-    //             move |appsink| match pull_sample(appsink, tx_video.clone()) {
-    //                 Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
-    //                 Err(err) => {
-    //                     log::error!("VIDEO CAPTURE | {}", err);
-    //                     let shutdown_cpy = shutdown.clone();
-    //                     let _ = Box::pin(async move {    
-    //                         shutdown_cpy.notify_error(false, "Video capture Set callbacks").await;
-    //                         log::error!("SENDER | Notify error sended");
-                            
-    //                     });
-    //                     Err(gstreamer::FlowError::Error)
-    //                 }
-    //             },
-    //         )
-    //         .build(),
-    // );
-
-    let mut shutdown_clone = shutdown.clone();
-    tokio::spawn(async move {
-        shutdown_clone.add_task("Audio pull sample").await;
-        loop {
-            if let Err(_e) = pull_sample(&audio_sink, tx_audio.clone()).await.map_err(|err| {
-                log::error!("AUDIO CAPTURE | {}", err);
-            }) {
-                shutdown_clone
-                    .notify_error(false, "failed pushing audio sample")
-                    .await;
-                log::error!("RECEIVER | Failed pushing audio sample");
-                break;
-            }
-        }
-        println!("salgo del loop de audio PIBE");
-    });
-    // audio_sink.set_callbacks(
-    //     gstreamer_app::AppSinkCallbacks::builder()
-    //         .new_sample(
-    //             move |appsink| match pull_sample(appsink, tx_audio.clone()) {
-    //                 Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
-    //                 Err(err) => {
-    //                     log::error!("AUDIO CAPTURE | {}", err);
-    //                     Err(gstreamer::FlowError::Error)
-    //                 }
-    //             },
-    //         )
-    //         .build(),
-    // );
-
+    audio_sink.set_callbacks(
+        gstreamer_app::AppSinkCallbacks::builder()
+            .new_sample(
+                move |appsink| match pull_sample(appsink, tx_audio.clone()) {
+                    Ok(_) => Ok(gstreamer::FlowSuccess::Ok),
+                    Err(err) => {
+                        log::error!("AUDIO CAPTURE | {}", err);
+                        Err(gstreamer::FlowError::Error)
+                    }
+                },
+            )
+            .build(),
+    );
 
     Ok(pipeline)
 }
-
 
 pub async fn start_capture(
     tx_video: Sender<Vec<u8>>,
@@ -176,7 +146,6 @@ pub async fn start_capture(
     game_id: u64,
 ) {
     shutdown.add_task("Capture").await;
-
 
     barrier.wait().await;
 
@@ -194,40 +163,53 @@ pub async fn start_capture(
                 "CAPTURE | Failed to create video elements: {}",
                 e.to_string()
             );
-            shutdown.notify_error(false, "create elements video capture").await;
+            shutdown
+                .notify_error(false, "create elements video capture")
+                .await;
             return;
         }
     };
 
     let audio_caps = gstreamer::Caps::builder("audio/x-raw")
-    //.field("rate", 48000)
-    .field("channels", 2)
-    .build();
+        //.field("rate", 48000)
+        .field("channels", 2)
+        .build();
 
     let audio_elements = match audio_capture::create_elements() {
         Ok(e) => e,
         Err(e) => {
             log::error!("CAPTURE | Error creating  audio elements: {}", e.message);
-            shutdown.notify_error(false, "Create elements audio capture").await;
+            shutdown
+                .notify_error(false, "Create elements audio capture")
+                .await;
             return;
         }
     };
 
-    let pipeline = match create_pipeline(video_elements, audio_elements, tx_video, tx_audio, video_caps, audio_caps, shutdown.clone()) {
+    let pipeline = match create_pipeline(
+        video_elements,
+        audio_elements,
+        tx_video,
+        tx_audio,
+        video_caps,
+        audio_caps,
+        shutdown.clone(),
+    ) {
         Ok(p) => p,
         Err(e) => {
-            shutdown.notify_error(false,"crate pipeline video capture").await;
-            log::error!(
-                "CAPTURE | Failed to create pipeline: {}",
-                e.to_string()
-            );
+            shutdown
+                .notify_error(false, "crate pipeline video capture")
+                .await;
+            log::error!("CAPTURE | Failed to create pipeline: {}", e.to_string());
             return;
         }
     };
 
     // Start playing Payload
     if let Err(e) = pipeline.set_state(gstreamer::State::Playing) {
-        shutdown.notify_error(false, "failed set to playing audio video capture").await;
+        shutdown
+            .notify_error(false, "failed set to playing audio video capture")
+            .await;
         log::error!(
             "CAPTURE | Failed to set the pipeline to the `Playing` state: {}",
             e.to_string()
@@ -274,5 +256,3 @@ pub async fn start_capture(
     //     );
     // }
 }
-
-

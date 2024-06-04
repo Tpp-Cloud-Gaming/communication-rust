@@ -1,10 +1,6 @@
 use gstreamer::{glib, Element};
 
-use std::
-    collections::HashMap
-;
-
-
+use std::collections::HashMap;
 
 use super::video_const::ENCODER_BITRATE;
 
@@ -14,19 +10,22 @@ use super::video_const::ENCODER_BITRATE;
 ///  A Result containing:
 /// * A `HashMap` of Gstreamer elements in case of success.
 /// * A `glib::BoolError` in case of error
-pub fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Element>, glib::BoolError> {
+pub fn create_elements(
+    window_handle: u64,
+) -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
     // Create the elements
     let d3d11screencapturesrc = gstreamer::ElementFactory::make("d3d11screencapturesrc")
         .name("d3d11screencapturesrc")
         .property("show-cursor", true)
         .property("window-handle", window_handle)
+        .property_from_str("capture-api", "wgc")
+        .property("adapter", 0)
         .build()?;
 
     let queue = gstreamer::ElementFactory::make("queue")
         .name("video_capture_queue")
         .build()?;
-
 
     let videoconvert = gstreamer::ElementFactory::make("videoconvert")
         .name("videoconvert")
@@ -52,6 +51,7 @@ pub fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Eleme
 
     let rtph264pay = gstreamer::ElementFactory::make("rtph264pay")
         .name("rtph264pay")
+        .property_from_str("aggregate-mode", "zero-latency") //SET WEBRTC MODE
         .build()?;
 
     elements.insert("src", d3d11screencapturesrc);
@@ -62,5 +62,3 @@ pub fn create_elements(window_handle: u64) -> Result<HashMap<&'static str, Eleme
 
     Ok(elements)
 }
-
-

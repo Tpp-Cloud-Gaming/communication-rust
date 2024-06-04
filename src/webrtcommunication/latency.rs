@@ -84,7 +84,8 @@ impl Latency {
         }));
 
         let socket = create_socket(UDP_SOCKET_ADDR, Duration::from_secs(UDP_SOCKET_TIMEOUT))?;
-
+        
+        if LATENCY_CHECK {
         // Create the log file
         let now = chrono::Local::now();
         let date = now.format("%Y-%m-%d_%H-%M-%S").to_string();
@@ -101,7 +102,6 @@ impl Latency {
         };
 
         // Register text message handling
-        if LATENCY_CHECK {
 
             let file = Arc::new(Mutex::new(file));
             ch.on_message(Box::new(move |msg: DataChannelMessage| {

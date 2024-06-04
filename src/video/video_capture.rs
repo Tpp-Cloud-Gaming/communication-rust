@@ -51,7 +51,7 @@ pub fn create_elements(
 
     let rtph264pay = gstreamer::ElementFactory::make("rtph264pay")
         .name("rtph264pay")
-        .property_from_str("aggregate-mode", "zero-latency") //SET WEBRTC MODE
+        //.property_from_str("aggregate-mode", "zero-latency") //SET WEBRTC MODE
         .build()?;
 
     elements.insert("src", d3d11screencapturesrc);

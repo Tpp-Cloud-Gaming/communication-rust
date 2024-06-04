@@ -59,7 +59,7 @@ impl SenderSide {
 
         initialize_game(game_path)?;
 
-        let barrier = Arc::new(Barrier::new(4));
+        let barrier = Arc::new(Barrier::new(5));
 
         //Create audio frames channels
         let (tx_audio, rx_audio) = channel(100);
@@ -181,6 +181,11 @@ impl SenderSide {
         let client_sdp = ws.wait_for_client_sdp().await?;
         check_error(comunication.set_sdp(client_sdp).await, &shutdown).await?;
 
+        
+        barrier.wait().await;
+        ws.start_session(offerer_name, client_info.client_name.as_str()).await?;
+        println!("SENDER | Start session msg sended");
+
         println!("Press ctrl-c to stop");
         tokio::select! {
             _ = done_rx.recv() => {
@@ -194,6 +199,7 @@ impl SenderSide {
             }
         };
 
+        ws.stop_session(offerer_name, client_info.client_name.as_str()).await?;
         kill_process(pid)?;
 
         if pc.close().await.is_err() {

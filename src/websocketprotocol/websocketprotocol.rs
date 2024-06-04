@@ -135,4 +135,28 @@ impl WsProtocol {
             Err(_) => Err(Error::new(ErrorKind::Other, "Error sending sdp message")),
         }
     }
+
+    pub async fn start_session(&mut self, offerer: &str, client: &str) -> Result<(), Error> {
+        match self
+            .ws
+            .send_text(format!("startSession|{}|{}", offerer, client))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => Err(Error::new(ErrorKind::Other, "Error sending sdp message")),
+        }
+    }
+
+    pub async fn stop_session(&mut self, offerer: &str, client: &str)-> Result<(), Error> {
+        match self
+            .ws
+            .send_text(format!("stopSession|{}|{}", offerer, client))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(_) => Err(Error::new(ErrorKind::Other, "Error sending sdp message")),
+        }
+    }
+
+
 }

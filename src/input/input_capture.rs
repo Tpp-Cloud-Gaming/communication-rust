@@ -111,7 +111,7 @@ async fn start_handler(
 
     loop {
         let shutdown_cpy_loop = shutdown_cpy.clone();
-
+        tokio::spawn(async move {});
 
         match receiver.next_event() {
             message_loop::Event::Keyboard {
@@ -222,7 +222,7 @@ async fn start_handler(
             break;
         };
 
-        tokio::task::yield_now().await;
+        //tokio::task::yield_now().await;
     }
 }
 

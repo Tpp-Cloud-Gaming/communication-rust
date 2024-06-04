@@ -101,23 +101,25 @@ impl Latency {
         };
 
         // Register text message handling
-        let file = Arc::new(Mutex::new(file));
-        ch.on_message(Box::new(move |msg: DataChannelMessage| {
-            let file = Arc::clone(&file);
-            let socket_cpy = match socket.try_clone() {
-                Ok(s) => s,
-                Err(e) => {
-                    log::error!("LATENCY | Error cloning socket: {:?}", e);
-                    return Box::pin(async {});
-                }
-            };
-            Box::pin(async move {
-                let msg_str = match String::from_utf8(msg.data.to_vec()) {
+        if LATENCY_CHECK {
+
+            let file = Arc::new(Mutex::new(file));
+            ch.on_message(Box::new(move |msg: DataChannelMessage| {
+                let file = Arc::clone(&file);
+                let socket_cpy = match socket.try_clone() {
                     Ok(s) => s,
                     Err(e) => {
-                        log::error!("LATENCY | Error converting message to string: {:?}", e);
-                        return;
+                        log::error!("LATENCY | Error cloning socket: {:?}", e);
+                        return Box::pin(async {});
                     }
+                };
+                Box::pin(async move {
+                    let msg_str = match String::from_utf8(msg.data.to_vec()) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            log::error!("LATENCY | Error converting message to string: {:?}", e);
+                            return;
+                        }
                 };
                 let rec_time = match msg_str.parse::<u32>() {
                     Ok(t) => t,
@@ -147,7 +149,8 @@ impl Latency {
                 };
             })
         }));
-
+        
+        }
         Ok(())
     }
 }

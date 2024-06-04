@@ -38,7 +38,7 @@ impl ReceiverSide {
 
         let peer_connection = comunication.get_peer();
 
-        let barrier = Arc::new(Barrier::new(3));
+        let barrier = Arc::new(Barrier::new(4));
         let barrier_clone = barrier.clone();
         // Start mosue and keyboard capture
         let pc_cpy = peer_connection.clone();
@@ -210,8 +210,7 @@ fn set_on_track_handler(
             let mut shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
                 tokio::spawn(async move {
-                    //println!("Llegue a la barrier de audio");
-                    //barrier_audio.wait().await;
+                    barrier_audio.wait().await;
                     println!("RECEIVER | Got OPUS Track");
                     let _ = read_audio_track(track, tx_audio_cpy, &mut shutdown_cpy).await;
                 });
@@ -224,8 +223,7 @@ fn set_on_track_handler(
             let mut shutdown_cpy = shutdown.clone();
             return Box::pin(async move {
                 tokio::spawn(async move {
-                    //println!("Llegue a la barrier de video");
-                    //barrier_video.wait().await;
+                    barrier_video.wait().await;
                     println!("RECEIVER | Got H264 Track");
                     let _ = read_video_track(track, tx_video_cpy, &mut shutdown_cpy).await;
                 });
@@ -318,8 +316,7 @@ async fn read_video_track(
         tokio::select! {
 
             result = track.read(&mut buff) => {
-                if let Ok((_rtp_packet, _)) = result {
-
+                if let Ok((_rtp_packet, _)) = result {                  
                     match tx.send((false, buff.to_vec())){
                         Ok(_) => {}
                         Err(e) => {
@@ -399,7 +396,7 @@ fn add_peer_connection_handler(
             log::info!("Peer Connection state: Connected");
             return Box::pin(async move {
                 println!("RECEIVER | Barrier waiting");
-                barrier_cpy.wait().await;
+                //barrier_cpy.wait().await;
                 println!("RECEIVER | Barrier released");
             });
         }

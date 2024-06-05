@@ -12,11 +12,7 @@ pub mod websocketprotocol;
 use crate::front_connection::front_protocol::{ClientType, FrontConnection};
 use crate::services::receiver::ReceiverSide;
 use crate::services::sender::SenderSide;
-use crate::websocketprotocol::websocketprotocol::WsProtocol;
-use std::thread::sleep;
-use std::time::Duration;
-
-use tokio::runtime::Handle;
+use crate::websocketprotocol::socket_protocol::WsProtocol;
 
 use std::io::Error;
 
@@ -39,8 +35,8 @@ async fn main() -> Result<(), Error> {
                     .expect("Missing offerer name parameter.");
 
                 let game_name = client.game_name.expect("Missign game name parameter.");
-                if let Err(_) =
-                    ReceiverSide::new(&client.username, &offerer_username, &game_name).await
+                if (ReceiverSide::init(&client.username, &offerer_username, &game_name).await)
+                    .is_err()
                 {
                     println!("Connection Missed. \nRestarting...");
                     continue;
@@ -48,12 +44,7 @@ async fn main() -> Result<(), Error> {
                 break;
             }
             ClientType::SENDER => {
-                if let Err(_) = SenderSide::new(&client.username, &mut ws).await {
-                    //break;
-                    continue;
-                    //println!("Connection Missed. \nRestarting...");
-                } else{
-                    //break;
+                if (SenderSide::init(&client.username, &mut ws).await).is_err() {
                     continue;
                 }
             }
@@ -61,6 +52,8 @@ async fn main() -> Result<(), Error> {
     }
 
     println!("Main done");
-    unsafe {gstreamer::deinit();}
+    unsafe {
+        gstreamer::deinit();
+    }
     Ok(())
 }

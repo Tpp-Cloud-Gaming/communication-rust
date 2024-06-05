@@ -107,11 +107,11 @@ async fn start_handler(
     let shutdown_cpy = shutdown.clone();
 
     // The List of keys that will be blocked by the APP:
-    let block_keys = vec![Vk::LeftWin, Vk::RightWin];
+    let block_keys = [Vk::LeftWin, Vk::RightWin];
 
     loop {
         let shutdown_cpy_loop = shutdown_cpy.clone();
-        tokio::spawn(async move {});
+        tokio::task::spawn(async move {});
 
         match receiver.next_event() {
             message_loop::Event::Keyboard {

@@ -37,11 +37,11 @@ use crate::utils::webrtc_const::{
     STREAM_TRACK_ID, STUN_ADRESS, VIDEO_TRACK_ID,
 };
 use crate::webrtcommunication::latency::Latency;
-use crate::websocketprotocol::websocketprotocol::WsProtocol;
+use crate::websocketprotocol::socket_protocol::WsProtocol;
 
 pub struct SenderSide {}
 impl SenderSide {
-    pub async fn new(offerer_name: &str, ws: &mut WsProtocol) -> Result<(), Error> {
+    pub async fn init(offerer_name: &str, ws: &mut WsProtocol) -> Result<(), Error> {
         //Start log
 
         // Start shutdown
@@ -181,9 +181,9 @@ impl SenderSide {
         let client_sdp = ws.wait_for_client_sdp().await?;
         check_error(comunication.set_sdp(client_sdp).await, &shutdown).await?;
 
-        
         barrier.wait().await;
-        ws.start_session(offerer_name, client_info.client_name.as_str()).await?;
+        ws.start_session(offerer_name, client_info.client_name.as_str())
+            .await?;
         println!("SENDER | Start session msg sended");
 
         println!("Press ctrl-c to stop");
@@ -199,7 +199,8 @@ impl SenderSide {
             }
         };
 
-        ws.stop_session(offerer_name, client_info.client_name.as_str()).await?;
+        ws.stop_session(offerer_name, client_info.client_name.as_str())
+            .await?;
         kill_process(pid)?;
 
         if pc.close().await.is_err() {
@@ -308,11 +309,11 @@ fn set_peer_events(
 ) {
     // Set the handler for ICE connection state
     // This will notify you when the peer has connected/disconnected
-    pc.on_ice_connection_state_change(Box::new(move |connection_state: RTCIceConnectionState| {
-        log::info!("SENDER | ICE Connection State has changed | {connection_state}");
-        if connection_state == RTCIceConnectionState::Connected {}
-        Box::pin(async {})
-    }));
+    // pc.on_ice_connection_state_change(Box::new(move |connection_state: RTCIceConnectionState| {
+    //     log::info!("SENDER | ICE Connection State has changed | {connection_state}");
+    //     if connection_state == RTCIceConnectionState::Connected {}
+    //     Box::pin(async {})
+    // }));
 
     // Set the handler for Peer connection state
     // This will notify you when the peer has connected/disconnected
@@ -598,7 +599,7 @@ fn kill_process(pid: u32) -> std::io::Result<()> {
             return Ok(());
         }
 
-        let result = TerminateProcess(h_process, 1);
+        TerminateProcess(h_process, 1);
     };
 
     Ok(())

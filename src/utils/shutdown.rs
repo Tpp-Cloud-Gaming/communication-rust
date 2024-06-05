@@ -26,24 +26,22 @@ impl Shutdown {
     }
 
     pub async fn wait_for_shutdown(&self) -> Result<SemaphorePermit<'_>, AcquireError> {
-          self.shutdown_notifier.acquire().await
-    
+        self.shutdown_notifier.acquire().await
     }
 
     pub async fn wait_for_error(&self) -> Result<SemaphorePermit<'_>, AcquireError> {
         let r: Result<SemaphorePermit, AcquireError> = self.error_notifier.acquire().await;
-        
+
         let mut counter = self.counter.lock().await;
         *counter -= 1;
         if *counter == 0 {
-        
             self.shutdown_notifier.add_permits(1);
         }
         println!("SHUTDOWN COUNT: {}", *counter);
         r
     }
 
-    pub async fn add_task(&mut self, task_id:&str ) {
+    pub async fn add_task(&mut self, _task_id: &str) {
         let mut counter = self.counter.lock().await;
         *counter += 1;
     }
@@ -58,12 +56,11 @@ impl Shutdown {
                 *counter -= 1;
                 println!("SHUTDOWN COUNT: {}", *counter);
             }
-            
+
             if *counter == 0 {
-        
                 self.shutdown_notifier.add_permits(1);
             }
-            
+
             let mut notifier_active = self.notifier_active.lock().await;
             log::error!("Shutdown | Notifier active {:?}", *notifier_active);
             if !(*notifier_active) {

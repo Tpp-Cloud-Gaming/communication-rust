@@ -22,12 +22,12 @@ use crate::utils::shutdown::Shutdown;
 use crate::utils::webrtc_const::STUN_ADRESS;
 use crate::webrtcommunication::communication::{encode, Communication};
 use crate::webrtcommunication::latency::Latency;
-use crate::websocketprotocol::websocketprotocol::WsProtocol;
+use crate::websocketprotocol::socket_protocol::WsProtocol;
 
 pub struct ReceiverSide {}
 
 impl ReceiverSide {
-    pub async fn new(client_name: &str, offerer_name: &str, game_name: &str) -> Result<(), Error> {
+    pub async fn init(client_name: &str, offerer_name: &str, game_name: &str) -> Result<(), Error> {
         // Initialize Log:
         let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
         ws.init_client(client_name, offerer_name, game_name).await?;
@@ -67,7 +67,6 @@ impl ReceiverSide {
                         .await;
                 }
             }
-            println!("SALGO DE INPUT CAPTURE");
         });
 
         // Create video frame channels
@@ -91,7 +90,6 @@ impl ReceiverSide {
                 barrier_clone_player,
             )
             .await;
-            println!("SALGO DEL START_PLAYER");
         });
 
         // Set a handler for when a new remote track starts, this handler saves buffers to disk as
@@ -119,7 +117,7 @@ impl ReceiverSide {
             ));
         }
 
-        add_peer_connection_handler(&peer_connection, shutdown.clone(), barrier);
+        add_peer_connection_handler(&peer_connection, shutdown.clone());
 
         // Set the remote SessionDescription: ACA METER USER INPUT Y PEGAR EL SDP
         // Wait for the offer to be pasted
@@ -316,7 +314,7 @@ async fn read_video_track(
         tokio::select! {
 
             result = track.read(&mut buff) => {
-                if let Ok((_rtp_packet, _)) = result {                  
+                if let Ok((_rtp_packet, _)) = result {
                     match tx.send((false, buff.to_vec())){
                         Ok(_) => {}
                         Err(e) => {
@@ -386,17 +384,14 @@ fn channel_handler(peer_connection: &Arc<RTCPeerConnection>, shutdown: shutdown:
 fn add_peer_connection_handler(
     peer_connection: &Arc<RTCPeerConnection>,
     shutdown: shutdown::Shutdown,
-    barrier: Arc<Barrier>,
 ) {
     peer_connection.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
         log::info!("Peer Connection State has changed {s}");
 
         if s == RTCPeerConnectionState::Connected {
-            let barrier_cpy = barrier.clone();
             log::info!("Peer Connection state: Connected");
             return Box::pin(async move {
                 println!("RECEIVER | Barrier waiting");
-                //barrier_cpy.wait().await;
                 println!("RECEIVER | Barrier released");
             });
         }

@@ -219,17 +219,8 @@ fn create_pipeline(
                 log::error!("RECEIVER | Failed pushing video sample");
                 break;
             }
-            // if shutdown_clone.check_for_error().await {
-            //     log::error!(
-            //         "VIDEO PUSH SAMPLE | Received Shutdown"
-            //     );
-            //     break;
-            // }
         }
-        println!("salgo del loop de video PIBE");
     });
-
-    
 
     let mut shutdown_cpy = shutdown.clone();
     tokio::spawn(async move {
@@ -244,15 +235,8 @@ fn create_pipeline(
                 log::error!("RECEIVER | Failed pushing audio sample");
                 break;
             }
-            // if shutdown_cpy.check_for_error().await {
-            //     log::error!("AUDIO PUSH SAMPLE | Received Shutdown");
-            //     break;
-            // }
         }
-        println!("salgo del loop de audio PIBE");
     });
-
-    
 
     let videosink = &video_elements["sink"];
     videosink.connect_closure(

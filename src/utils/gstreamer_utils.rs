@@ -59,7 +59,6 @@ pub async fn read_bus(pipeline: Pipeline, shutdown: &mut shutdown::Shutdown) {
             _ => {}
         }
     }
-    println!("SALIO PIBE");
 }
 
 /// Pulls sample from AppSink buffer and sends it as `Vec<u8>` through a specified channel.
@@ -111,7 +110,7 @@ pub fn pull_sample(appsink: &AppSink, tx: Sender<Vec<u8>>) -> Result<(), Error> 
 pub fn push_sample(appsrc: &AppSrc, rx: &Receiver<(bool, Vec<u8>)>) -> Result<(), Error> {
     match rx.recv() {
         Ok(data) => {
-            if data.0 == true {
+            if data.0 {
                 log::error!("PUSH SAMPLE | Shutdown message received");
                 return Err(Error::new(
                     io::ErrorKind::Other,
@@ -121,11 +120,11 @@ pub fn push_sample(appsrc: &AppSrc, rx: &Receiver<(bool, Vec<u8>)>) -> Result<()
             let frame = data.1;
             let buffer = gstreamer::Buffer::from_slice(frame);
 
-            if let Err(e) = appsrc.push_buffer(buffer) {
+            if let Err(_e) = appsrc.push_buffer(buffer) {
                 return Err(Error::new(io::ErrorKind::Other, "Error pushing buffer"));
             };
         }
-        Err(e) => return Err(Error::new(io::ErrorKind::Other, "Error pushing buffer")),
+        Err(_e) => return Err(Error::new(io::ErrorKind::Other, "Error pushing buffer")),
     };
 
     Ok(())

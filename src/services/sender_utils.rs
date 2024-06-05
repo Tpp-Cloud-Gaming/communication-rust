@@ -24,15 +24,10 @@
 /// The `get_hwnd_by_pid` function uses the `EnumWindows` function to find the handler (HWND) of
 /// a running process given its PID.
 ///
-pub mod sender_utils {
-    // ... (existing code)
-}
 use std::io::{Error, ErrorKind};
 
 use std::process::Command;
 
-use std::ffi::OsString;
-use std::os::windows::ffi::OsStringExt;
 use std::thread::sleep;
 use std::time::Duration;
 use winapi::{
@@ -63,7 +58,7 @@ const HANDLER_RETRIES: usize = 5;
 const HANDLER_SLEEP: usize = 10000;
 
 pub fn initialize_game(game_path: &str) -> Result<(), Error> {
-    if (game_path.ends_with(".exe")) {
+    if game_path.ends_with(".exe") {
         match Command::new(game_path).spawn() {
             Ok(_child) => Ok(()),
             Err(_) => Err(Error::new(ErrorKind::Other, "Error initializing game")),
@@ -76,7 +71,7 @@ pub fn initialize_game(game_path: &str) -> Result<(), Error> {
     }
 }
 
-pub fn get_handler(target_path: &str) -> Result<(u64,u32), Error> {
+pub fn get_handler(target_path: &str) -> Result<(u64, u32), Error> {
     let mut found_process: Option<ProcessInfo> = None;
     let game_path: String = target_path.replace("\\\\", "\\");
     sleep(Duration::from_millis(20000));
@@ -96,27 +91,25 @@ pub fn get_handler(target_path: &str) -> Result<(u64,u32), Error> {
     }
 
     if found_process.is_none() {
-        println!("Process not found PID");
+        log::error!("SENDER UTILS | Process not found PID");
         return Err(Error::new(
             ErrorKind::Other,
             "Process PID not found after retries",
         ));
     }
-    println!("Found process");
     for _ in 0..HANDLER_RETRIES {
         if let Some(process) = &found_process {
-            match get_hwnd_by_pid(process.pid) {
-                Some(hwnd) => return Ok((hwnd as u64, process.pid)),
-                None => (),
+            if let Some(hwnd) = get_hwnd_by_pid(process.pid) {
+                return Ok((hwnd as u64, process.pid));
             }
         }
         sleep(Duration::from_millis(HANDLER_SLEEP as u64));
     }
-    println!("Process not found HWND");
-    return Err(Error::new(
+    log::error!("SENDER UTILS | Process not found HWND");
+    Err(Error::new(
         ErrorKind::Other,
         "Process HWND not found after retries",
-    ));
+    ))
 }
 
 /// Function that retrieves ProcessInfo with PID
@@ -126,7 +119,7 @@ pub fn get_handler(target_path: &str) -> Result<(u64,u32), Error> {
 ///
 /// * `Result<Vec<ProcessInfo>>` - If the function succeeds, the return value is a ProcessInfo to the window. If no window is associated with the process, the return value is an Error.
 fn get_processes_info() -> std::io::Result<Vec<ProcessInfo>> {
-    let mut system = System::new_all();
+    let system = System::new_all();
     let mut processes: Vec<ProcessInfo> = Vec::new();
 
     for (pid, process) in system.processes() {
@@ -161,9 +154,6 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
         let length = GetWindowTextLengthW(hwnd) + 1;
         let mut buffer: Vec<u16> = vec![0; length as usize];
         GetWindowTextW(hwnd, buffer.as_mut_ptr(), length);
-        let title = OsString::from_wide(&buffer[..length as usize - 1])
-            .to_string_lossy()
-            .into_owned();
 
         data.hwnd = Some(hwnd);
         return FALSE; // Stop enumeration

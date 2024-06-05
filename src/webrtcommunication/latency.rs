@@ -84,26 +84,26 @@ impl Latency {
         }));
 
         let socket = create_socket(UDP_SOCKET_ADDR, Duration::from_secs(UDP_SOCKET_TIMEOUT))?;
-        
+
         if LATENCY_CHECK {
-        // Create the log file
-        let now = chrono::Local::now();
-        let date = now.format("%Y-%m-%d_%H-%M-%S").to_string();
-        let mut file = match std::fs::OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(format!("{}.txt", date))
-        {
-            Ok(f) => f,
-            Err(e) => {
-                log::error!("LATENCY | Error opening file: {:?}", e);
-                return Err(Error::new(ErrorKind::Other, "Error opening file"));
-            }
-        };
+            // Create the log file
+            let now = chrono::Local::now();
+            let date = now.format("%Y-%m-%d_%H-%M-%S").to_string();
+            let file = match std::fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(format!("{}.txt", date))
+            {
+                Ok(f) => f,
+                Err(e) => {
+                    log::error!("LATENCY | Error opening file: {:?}", e);
+                    return Err(Error::new(ErrorKind::Other, "Error opening file"));
+                }
+            };
 
-        // Register text message handling
-
+            // Register text message handling
             let file = Arc::new(Mutex::new(file));
+
             ch.on_message(Box::new(move |msg: DataChannelMessage| {
                 let file = Arc::clone(&file);
                 let socket_cpy = match socket.try_clone() {
@@ -120,36 +120,36 @@ impl Latency {
                             log::error!("LATENCY | Error converting message to string: {:?}", e);
                             return;
                         }
-                };
-                let rec_time = match msg_str.parse::<u32>() {
-                    Ok(t) => t,
-                    Err(e) => {
-                        log::error!("LATENCY |Error parsing message to u32: {:?}", e);
+                    };
+                    let rec_time = match msg_str.parse::<u32>() {
+                        Ok(t) => t,
+                        Err(e) => {
+                            log::error!("LATENCY |Error parsing message to u32: {:?}", e);
+                            return;
+                        }
+                    };
+                    let time = match get_time(socket_cpy) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            log::error!("LATENCY |Error getting time: {:?}", e);
+                            return;
+                        }
+                    };
+                    let result = match time.checked_sub(rec_time) {
+                        None => {
+                            log::error!("LATENCY | Error calculating difference");
+                            return;
+                        }
+                        Some(t) => t,
+                    };
+                    log::info!("LATENCY CHECK | Difference: {} milliseconds", result);
+                    let mut file = file.lock().unwrap();
+                    if let Err(_e) = write_in_file(&mut file, result) {
+                        log::error!("LATENCY | Error writing file");
                         return;
-                    }
-                };
-                let time = match get_time(socket_cpy) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        log::error!("LATENCY |Error getting time: {:?}", e);
-                        return;
-                    }
-                };
-                let result = match time.checked_sub(rec_time) {
-                    None => {
-                        log::error!("LATENCY | Error calculating difference");
-                        return;
-                    }
-                    Some(t) => t,
-                };
-                log::info!("LATENCY CHECK | Difference: {} milliseconds", result);
-                let mut file = file.lock().unwrap();
-                if let Err(_e) = write_in_file(&mut *file, result) {
-                    return;
-                };
-            })
-        }));
-        
+                    };
+                })
+            }));
         }
         Ok(())
     }
@@ -164,7 +164,7 @@ fn write_in_file(file: &mut std::fs::File, latency: u32) -> Result<(), Error> {
         Ok(_) => (),
         Err(e) => log::error!("LATENCY | Error writing to file: {:?}", e),
     };
-    return Ok(());
+    Ok(())
 }
 
 /// Creates a UDP socket binded to the specified address with a read timeout.

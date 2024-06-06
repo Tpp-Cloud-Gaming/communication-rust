@@ -13,6 +13,10 @@ use gstreamer::{glib, Element};
 pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
 
+    let rtpjitterbuffer = gstreamer::ElementFactory::make("rtpjitterbuffer")
+        .name("rtpjitterbuffer")
+        .build()?;
+
     let rtph264depay = gstreamer::ElementFactory::make("rtph264depay")
         .name("rtph264depay")
         .build()?;
@@ -36,6 +40,7 @@ pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolErr
         .property_from_str("fullscreen-toggle-mode", "property")
         .build()?;
 
+    elements.insert("jitter", rtpjitterbuffer);
     elements.insert("depay", rtph264depay);
     elements.insert("parse", h264parse);
     elements.insert("dec", d3d11h264dec);

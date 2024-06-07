@@ -416,17 +416,11 @@ async fn start_audio_sending(
     let mut error_tracker_write =
         crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
-    let mut error_tracker_rec =
-        crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
-
     let sample_duration =
         Duration::from_millis((AUDIO_CHANNELS as u64 * 10000000) / AUDIO_SAMPLE_RATE as u64); //TODO: no hardcodear
 
     let mut data = match rx.recv().await {
-        Some(d) => {
-            error_tracker_rec.increment();
-            d
-        }
+        Some(d) => d,
         None => {
             shutdown.notify_error(false, "No audio data received").await;
             return;
@@ -455,28 +449,25 @@ async fn start_audio_sending(
             error_tracker_write.increment();
         }
 
-        data = match rx.try_recv() {
-            Ok(d) => {
-                error_tracker_rec.increment();
-                d
+        tokio::select! {
+            a = rx.recv() => {
+                match a {
+                    Some(d) => {
+                        data = d;
+                    }
+                    None => {
+                        log::error!("SENDER | Error receiving audio data |");
+                        shutdown
+                            .notify_error(false, "Error receiving audio data")
+                            .await;
+                        return;
+                    }
+                }
+            },
+            _ = shutdown.wait_for_error() => {
+                log::error!("SENDER | Shutdown signal received");
+                break;
             }
-            Err(_) => {
-                if error_tracker_rec.increment_with_error() {
-                    log::error!("SENDER | Max attemps | Error receiving audio data | ",);
-                    shutdown
-                        .notify_error(false, "Error receiveing audio data")
-                        .await;
-                    return;
-                } else {
-                    log::warn!("SENDER | Error receiving audio data | ");
-                };
-                continue;
-            }
-        };
-
-        if shutdown.check_for_error().await {
-            log::error!("SENDER | Start audio sending check for error");
-            return;
         }
     }
 }
@@ -500,16 +491,11 @@ async fn start_video_sending(
     // TODO: Esto puede generar delay me parece
     barrier_video_send.wait().await;
 
-    let mut error_tracker_rec =
-        crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
     let mut error_tracker_write =
         crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
     let mut data = match rx.recv().await {
-        Some(d) => {
-            error_tracker_rec.increment();
-            d
-        }
+        Some(d) => d,
         None => {
             shutdown.notify_error(false, "No video data received").await;
             return;
@@ -531,31 +517,25 @@ async fn start_video_sending(
             error_tracker_write.increment();
         }
 
-        data = match rx.try_recv() {
-            Ok(d) => {
-                error_tracker_rec.increment();
-                d
+        tokio::select! {
+            a = rx.recv() => {
+                match a {
+                    Some(d) => {
+                        data = d;
+                    }
+                    None => {
+                        log::error!("SENDER | Error receiving video data |");
+                        shutdown
+                            .notify_error(false, "Error receiving video data")
+                            .await;
+                        return;
+                    }
+                }
+            },
+            _ = shutdown.wait_for_error() => {
+                log::error!("SENDER | Shutdown signal received");
+                break;
             }
-            Err(_) => {
-                if error_tracker_rec.increment_with_error() {
-                    log::error!("SENDER | Max attemps | Error receiving video data |",);
-                    shutdown
-                        .notify_error(false, "Error max attemps on video sending")
-                        .await;
-                    return;
-                } else {
-                    log::info!("SENDER | Error receiving video data |");
-                };
-                continue;
-            }
-        };
-
-        //let sample_duration =
-        //    Duration::from_millis(1000 / 30 as u64); //TODO: no hardcodear
-
-        if shutdown.check_for_error().await {
-            log::error!("SENDER | Start video sending check for error");
-            return;
         }
     }
 }

@@ -224,11 +224,8 @@ pub async fn start_capture(
         read_bus(pipeline_cpy, &mut shutdown_cpy).await;
     });
 
-    tokio::select! {
-        _ = shutdown.wait_for_error() => {
-            log::info!("PLAYER | Shutdown received");
-        },
-    }
+    shutdown.wait_for_error().await;
+    log::error!("PLAYER | Shutdown received");
 
     if let Err(e) = pipeline.set_state(gstreamer::State::Null) {
         log::error!("PLAYER | Failed to set pipeline to null: {}", e);

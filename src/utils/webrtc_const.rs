@@ -25,5 +25,5 @@ pub const VIDEO_TRACK_ID: &str = "video";
 pub const READ_TRACK_THRESHOLD: u32 = 900;
 pub const READ_TRACK_LIMIT: u32 = 1000;
 //RECEIVER
-pub const SEND_TRACK_THRESHOLD: u32 = 900;
-pub const SEND_TRACK_LIMIT: u32 = 1000;
+pub const SEND_TRACK_THRESHOLD: u32 = 9000;
+pub const SEND_TRACK_LIMIT: u32 = 10000;

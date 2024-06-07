@@ -1,5 +1,6 @@
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
@@ -17,7 +18,6 @@ use webrtc::data_channel::RTCDataChannel;
 
 use crate::utils::shutdown;
 use webrtc::api::media_engine::{MIME_TYPE_H264, MIME_TYPE_OPUS};
-use webrtc::ice_transport::ice_connection_state::RTCIceConnectionState;
 use webrtc::media::Sample;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::RTCPeerConnection;
@@ -42,13 +42,9 @@ use crate::websocketprotocol::socket_protocol::WsProtocol;
 pub struct SenderSide {}
 impl SenderSide {
     pub async fn init(offerer_name: &str, ws: &mut WsProtocol) -> Result<(), Error> {
-        //Start log
-
-        // Start shutdown
         let shutdown = Shutdown::new();
 
         // Wait for client to request a connection
-        //let mut ws = WsProtocol::ws_protocol().await?;
         ws.init_offer(offerer_name).await?;
         let client_info = ws.wait_for_game_solicitude().await?;
 
@@ -94,8 +90,6 @@ impl SenderSide {
             .await;
         });
 
-        let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
-
         let pc = comunication.get_peer();
 
         let (_rtp_sender, audio_track) =
@@ -103,8 +97,6 @@ impl SenderSide {
                 .await?;
         let (rtp_video_sender, video_track) =
             create_track_rtp(pc.clone(), shutdown.clone(), MIME_TYPE_H264, VIDEO_TRACK_ID).await?;
-
-        // Start the latency measurement
 
         check_error(Latency::start_latency_sender(pc.clone()).await, &shutdown).await?;
 
@@ -139,7 +131,7 @@ impl SenderSide {
             .await;
         });
 
-        set_peer_events(&pc, done_tx, barrier.clone(), shutdown.clone());
+        set_peer_events(&pc, barrier.clone(), shutdown.clone());
 
         // Create an answer to send to the other process
         let offer = match pc.create_offer(None).await {
@@ -188,9 +180,6 @@ impl SenderSide {
 
         println!("Press ctrl-c to stop");
         tokio::select! {
-            _ = done_rx.recv() => {
-                log::info!("SENDER | Received done signal");
-            }
             _ = tokio::signal::ctrl_c() => {
                 println!("Ended by ctrl c");
             }
@@ -303,7 +292,6 @@ async fn create_track_rtp(
 /// * `barrier` - Used for synchronization.
 fn set_peer_events(
     pc: &Arc<RTCPeerConnection>,
-    done_tx: tokio::sync::mpsc::Sender<()>,
     barrier: Arc<Barrier>,
     shutdown: shutdown::Shutdown,
 ) {
@@ -343,11 +331,14 @@ fn set_peer_events(
         }
 
         if s == RTCPeerConnectionState::Failed {
-            // Wait until PeerConnection has had no network activity for 30 seconds or another failure. It may be reconnected using an ICE Restart.
-            // Use webrtc.PeerConnectionStateDisconnected if you are interested in detecting faster timeout.
-            // Note that the PeerConnection may come back from PeerConnectionStateDisconnected.
             log::error!("SENDER | Peer connection state: Failed");
-            let _ = done_tx.try_send(());
+            let shutdown_cpy = shutdown.clone();
+            return Box::pin(async move {
+                shutdown_cpy
+                    .notify_error(true, "Peer connection Failed")
+                    .await;
+                log::error!("SENDER | Notify error sended");
+            });
         }
 
         if s == RTCPeerConnectionState::Disconnected {
@@ -422,7 +413,10 @@ async fn start_audio_sending(
     // Wait for other tasks
     barrier_audio_send.wait().await;
 
-    let mut error_tracker =
+    let mut error_tracker_write =
+        crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
+
+    let mut error_tracker_rec =
         crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
     let sample_duration =
@@ -430,7 +424,7 @@ async fn start_audio_sending(
 
     let mut data = match rx.recv().await {
         Some(d) => {
-            error_tracker.increment();
+            error_tracker_rec.increment();
             d
         }
         None => {
@@ -449,7 +443,7 @@ async fn start_audio_sending(
             .await
         {
             log::warn!("SENDER | Error writing sample | {}", err);
-            if error_tracker.increment_with_error() {
+            if error_tracker_write.increment_with_error() {
                 log::error!("SENDER | Max attemps | Error writing sample | {}", err);
                 shutdown.notify_error(false, "Error writing sample").await;
                 return;
@@ -458,16 +452,16 @@ async fn start_audio_sending(
             };
             continue;
         } else {
-            error_tracker.increment();
+            error_tracker_write.increment();
         }
 
         data = match rx.try_recv() {
             Ok(d) => {
-                error_tracker.increment();
+                error_tracker_rec.increment();
                 d
             }
             Err(_) => {
-                if error_tracker.increment_with_error() {
+                if error_tracker_rec.increment_with_error() {
                     log::error!("SENDER | Max attemps | Error receiving audio data | ",);
                     shutdown
                         .notify_error(false, "Error receiveing audio data")
@@ -506,12 +500,14 @@ async fn start_video_sending(
     // TODO: Esto puede generar delay me parece
     barrier_video_send.wait().await;
 
-    let mut error_tracker =
+    let mut error_tracker_rec =
+        crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
+    let mut error_tracker_write =
         crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
     let mut data = match rx.recv().await {
         Some(d) => {
-            error_tracker.increment();
+            error_tracker_rec.increment();
             d
         }
         None => {
@@ -523,7 +519,7 @@ async fn start_video_sending(
     loop {
         if let Err(err) = video_track.write(&data).await {
             log::warn!("SENDER | Error writing sample | {}", err);
-            if error_tracker.increment_with_error() {
+            if error_tracker_write.increment_with_error() {
                 log::error!("SENDER | Max attemps | Error writing sample | {}", err);
                 shutdown.notify_error(false, "Error writing sample").await;
                 return;
@@ -532,16 +528,16 @@ async fn start_video_sending(
             };
             continue;
         } else {
-            error_tracker.increment();
+            error_tracker_write.increment();
         }
 
         data = match rx.try_recv() {
             Ok(d) => {
-                error_tracker.increment();
+                error_tracker_rec.increment();
                 d
             }
             Err(_) => {
-                if error_tracker.increment_with_error() {
+                if error_tracker_rec.increment_with_error() {
                     log::error!("SENDER | Max attemps | Error receiving video data |",);
                     shutdown
                         .notify_error(false, "Error max attemps on video sending")

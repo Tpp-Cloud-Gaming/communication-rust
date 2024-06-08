@@ -26,6 +26,12 @@ pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolErr
         .name("video_player_queue")
         .build()?;
 
+    let taginject = gstreamer::ElementFactory::make("taginject")
+        .name("taginject")
+        .property("tags", "title=Cloud-Gaming-Rental-Service")
+        .build()
+        .expect("Could not create d3d11videosink element.");
+
     let d3d11videosink = gstreamer::ElementFactory::make("d3d11videosink")
         .name("d3d11videosink")
         .property("emit-present", true)
@@ -37,6 +43,7 @@ pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolErr
     elements.insert("parse", h264parse);
     elements.insert("dec", d3d11h264dec);
     elements.insert("queue", queue);
+    elements.insert("taginject", taginject);
     elements.insert("sink", d3d11videosink);
 
     Ok(elements)

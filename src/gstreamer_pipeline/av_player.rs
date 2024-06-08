@@ -188,6 +188,7 @@ fn create_pipeline(
         &video_elements["parse"],
         &video_elements["dec"],
         &video_elements["queue"],
+        &video_elements["taginject"],
         &video_elements["sink"],
     ]) {
         return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
@@ -201,6 +202,7 @@ fn create_pipeline(
         &audio_elements["dec"],
         &audio_elements["convert"],
         &audio_elements["sample"],
+        &video_elements["taginject"],
         &audio_elements["sink"],
     ]) {
         return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));

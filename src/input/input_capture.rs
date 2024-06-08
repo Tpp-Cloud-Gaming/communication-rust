@@ -104,90 +104,45 @@ async fn start_handler(
     mouse_channel: Arc<RTCDataChannel>,
     shutdown: shutdown::Shutdown,
 ) {
-    let shutdown_cpy = shutdown.clone();
-
     // The List of keys that will be blocked by the APP:
     let block_keys = [Vk::LeftWin, Vk::RightWin];
 
     loop {
-        let shutdown_cpy_loop = shutdown_cpy.clone();
-        //tokio::task::spawn(async move {});
+        let button_channel = button_channel.clone();
+        let mouse_channel = mouse_channel.clone();
+        let shutdown_clone = shutdown.clone();
 
         match receiver.next_event() {
-            message_loop::Event::Keyboard {
-                vk,
-                action: Action::Press,
-                scan_code: _,
-            } => {
-                if block_keys.contains(&vk) {
+            message_loop::Event::Keyboard { vk, action, .. } if !block_keys.contains(&vk) => {
+                let action_str = if action == Action::Press {
+                    PRESS_KEYBOARD_ACTION
+                } else if action == Action::Release {
+                    RELEASE_KEYBOARD_ACTION
+                } else {
                     continue;
                 };
 
-                let button_channel_cpy = button_channel.clone();
                 let key = vk.into_u8().to_string();
-                match handle_button_action(
-                    button_channel_cpy,
-                    PRESS_KEYBOARD_ACTION,
-                    key,
-                    shutdown_cpy_loop.clone(),
-                )
-                .await
-                {
+                match handle_button_action(button_channel, action_str, key, shutdown_clone).await {
                     Ok(_) => (),
                     Err(e) => eprintln!("Failed to handle button action: {}", e),
                 }
             }
-            message_loop::Event::Keyboard {
-                vk,
-                action: Action::Release,
-                scan_code: _,
-            } => {
-                if block_keys.contains(&vk) {
+
+            message_loop::Event::MouseButton { action, button } => {
+                let action_str = if action == Action::Press {
+                    PRESS_MOUSE_ACTION
+                } else if action == Action::Release {
+                    RELEASE_MOUSE_ACTION
+                } else {
                     continue;
                 };
 
-                let button_channel_cpy = button_channel.clone();
-                let key = vk.into_u8().to_string();
                 match handle_button_action(
-                    button_channel_cpy,
-                    RELEASE_KEYBOARD_ACTION,
-                    key,
-                    shutdown_cpy_loop.clone(),
-                )
-                .await
-                {
-                    Ok(_) => (),
-                    Err(e) => eprintln!("Failed to handle button action: {}", e),
-                }
-            }
-            message_loop::Event::MouseButton {
-                action: Action::Press,
-                button,
-            } => {
-                let button_channel_cpy = button_channel.clone();
-                match handle_button_action(
-                    button_channel_cpy,
-                    PRESS_MOUSE_ACTION,
+                    button_channel,
+                    action_str,
                     button_to_i32(button).to_string(),
-                    shutdown_cpy_loop.clone(),
-                )
-                .await
-                {
-                    Ok(_) => (),
-                    Err(e) => eprintln!("Failed to handle button action: {}", e),
-                }
-            }
-            message_loop::Event::MouseButton {
-                action: Action::Release,
-                button,
-            } => {
-                let button_channel_cpy = button_channel.clone();
-
-                match handle_button_action(
-                    button_channel_cpy,
-                    RELEASE_MOUSE_ACTION,
-                    button_to_i32(button).to_string(),
-                    shutdown_cpy_loop.clone(),
+                    shutdown_clone,
                 )
                 .await
                 {
@@ -203,15 +158,14 @@ async fn start_handler(
                     == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
                 {
                     let mouse_channel_cpy = mouse_channel.clone();
-                    
-                        match mouse_channel_cpy
-                            .send_text(std::format!("{} {}", x, y).as_str())
-                            .await
-                        {
-                            Ok(_) => (),
-                            Err(e) => eprintln!("Failed to send mouse event: {}", e),
-                        }
-                    
+
+                    match mouse_channel_cpy
+                        .send_text(std::format!("{} {}", x, y).as_str())
+                        .await
+                    {
+                        Ok(_) => (),
+                        Err(e) => eprintln!("Failed to send mouse event: {}", e),
+                    }
                 }
             }
             _ => (),

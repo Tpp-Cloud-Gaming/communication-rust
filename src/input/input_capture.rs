@@ -111,7 +111,7 @@ async fn start_handler(
 
     loop {
         let shutdown_cpy_loop = shutdown_cpy.clone();
-        tokio::task::spawn(async move {});
+        //tokio::task::spawn(async move {});
 
         match receiver.next_event() {
             message_loop::Event::Keyboard {
@@ -203,7 +203,7 @@ async fn start_handler(
                     == webrtc::data_channel::data_channel_state::RTCDataChannelState::Open
                 {
                     let mouse_channel_cpy = mouse_channel.clone();
-                    tokio::task::spawn(async move {
+                    
                         match mouse_channel_cpy
                             .send_text(std::format!("{} {}", x, y).as_str())
                             .await
@@ -211,7 +211,7 @@ async fn start_handler(
                             Ok(_) => (),
                             Err(e) => eprintln!("Failed to send mouse event: {}", e),
                         }
-                    });
+                    
                 }
             }
             _ => (),
@@ -222,7 +222,7 @@ async fn start_handler(
             break;
         };
 
-        //tokio::task::yield_now().await;
+        tokio::task::yield_now().await;
     }
 }
 

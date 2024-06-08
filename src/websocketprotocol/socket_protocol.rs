@@ -47,7 +47,7 @@ impl WsProtocol {
                 game_name: parts[2].to_owned(),
                 game_path: parts[3].to_owned(),
             }),
-            _ => Err(Error::new(ErrorKind::InvalidData, "Invalid message")),
+            _ => Err(Error::new(ErrorKind::InvalidData, "Should be sdp request.")),
         }
     }
 
@@ -77,7 +77,7 @@ impl WsProtocol {
                 Ok(sdp.to_string())
                 // Do something with the answer
             }
-            _ => Err(Error::new(ErrorKind::InvalidData, "Invalid message")),
+            _ => Err(Error::new(ErrorKind::InvalidData, "Should be client sdp")),
         }
     }
 
@@ -117,7 +117,7 @@ impl WsProtocol {
                 let sdp = parts[1];
                 Ok(sdp.to_string())
             }
-            _ => Err(Error::new(ErrorKind::InvalidData, "Invalid message")),
+            _ => Err(Error::new(ErrorKind::InvalidData, "Should be offerer sdp")),
         }
     }
 

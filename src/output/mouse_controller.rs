@@ -1,11 +1,8 @@
 use std::sync::Arc;
-use std::thread;
 
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::RTCDataChannel;
 use winput::Mouse;
-
-use super::output_const::MOUSE_DELAY;
 
 /// # MouseController
 ///
@@ -28,7 +25,6 @@ impl MouseController {
     pub fn start_mouse_controller(ch: Arc<RTCDataChannel>) {
         ch.on_message(Box::new(move |msg: DataChannelMessage| {
             Box::pin(async move {
-                
                 let s = String::from_utf8_lossy(&msg.data);
 
                 // Split the string into two parts
@@ -50,7 +46,7 @@ impl MouseController {
                     }
                 };
 
-                thread::sleep(std::time::Duration::from_micros(MOUSE_DELAY));
+                //thread::sleep(std::time::Duration::from_micros(MOUSE_DELAY));
                 Mouse::move_relative(x, y);
             })
         }));

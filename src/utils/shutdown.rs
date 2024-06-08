@@ -68,7 +68,10 @@ impl Shutdown {
                 self.error_notifier.add_permits(*counter as usize);
                 *notifier_active = true;
             }
-            log::error!("Shutdown | Saliendo de notufy error");
+            log::error!(
+                "Shutdown | Saliendo de notify error | pendientes: {:?}",
+                *counter
+            );
         }
         // if main_task {
         //     _ = self.wait_for_shutdown().await;

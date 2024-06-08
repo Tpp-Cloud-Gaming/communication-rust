@@ -388,7 +388,7 @@ async fn read_rtcp(shutdown: &mut shutdown::Shutdown, rtp_sender: Arc<RTCRtpSend
 
             }
             _ = shutdown.wait_for_error() => {
-                log::error!("SENDER | Shutdown signal received");
+                log::error!("SENDER | read_rtcp | Shutdown signal received");
                 break;
             }
         }
@@ -465,7 +465,7 @@ async fn start_audio_sending(
                 }
             },
             _ = shutdown.wait_for_error() => {
-                log::error!("SENDER | Shutdown signal received");
+                log::error!("SENDER | START AUDIO SENDING | Shutdown signal received");
                 break;
             }
         }
@@ -533,7 +533,7 @@ async fn start_video_sending(
                 }
             },
             _ = shutdown.wait_for_error() => {
-                log::error!("SENDER | Shutdown signal received");
+                log::error!("SENDER | START VIDEO SENDING | Shutdown signal received");
                 break;
             }
         }

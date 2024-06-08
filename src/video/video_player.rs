@@ -2,9 +2,6 @@ use std::collections::HashMap;
 
 use gstreamer::{glib, Element};
 
-
-
-
 /// Creates the elements for the video player pipeline.
 ///
 /// # Returns
@@ -12,10 +9,6 @@ use gstreamer::{glib, Element};
 /// A Result containing a HashMap with the elements if the operation was successful, otherwise an Error is returned.
 pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolError> {
     let mut elements = HashMap::new();
-
-    let rtpjitterbuffer = gstreamer::ElementFactory::make("rtpjitterbuffer")
-        .name("rtpjitterbuffer")
-        .build()?;
 
     let rtph264depay = gstreamer::ElementFactory::make("rtph264depay")
         .name("rtph264depay")
@@ -40,7 +33,6 @@ pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolErr
         .property_from_str("fullscreen-toggle-mode", "property")
         .build()?;
 
-    elements.insert("jitter", rtpjitterbuffer);
     elements.insert("depay", rtph264depay);
     elements.insert("parse", h264parse);
     elements.insert("dec", d3d11h264dec);
@@ -49,5 +41,3 @@ pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolErr
 
     Ok(elements)
 }
-
-

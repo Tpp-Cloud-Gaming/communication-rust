@@ -165,7 +165,6 @@ fn create_pipeline(
 
     if let Err(e) = pipeline.add_many([
         video_source.upcast_ref(),
-        &video_elements["jitter"],
         &video_elements["depay"],
         &video_elements["parse"],
         &video_elements["dec"],
@@ -174,7 +173,7 @@ fn create_pipeline(
         audio_source.upcast_ref(),
         &audio_elements["queue"],
         &audio_elements["depay"],
-         &audio_elements["parse"],
+        &audio_elements["parse"],
         &audio_elements["dec"],
         &audio_elements["convert"],
         &audio_elements["sample"],
@@ -185,7 +184,6 @@ fn create_pipeline(
 
     if let Err(e) = gstreamer::Element::link_many([
         video_source.upcast_ref(),
-        &video_elements["jitter"],
         &video_elements["depay"],
         &video_elements["parse"],
         &video_elements["dec"],

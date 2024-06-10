@@ -3,7 +3,7 @@ use std::sync::Arc;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use winput::message_loop::EventReceiver;
-use winput::{message_loop, Button};
+use winput::{message_loop, Button, WheelDirection};
 use winput::{Action, Vk};
 
 use super::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
@@ -150,6 +150,27 @@ async fn start_handler(
                     Err(e) => eprintln!("Failed to handle button action: {}", e),
                 }
             }
+
+            message_loop::Event::MouseWheel { delta, direction } => {
+                if delta == 0.0 {
+                    continue;
+                }
+
+                let action_str = if direction == WheelDirection::Horizontal {
+                    SCROLL_HORIZONTAL_ACTION
+                } else if direction == WheelDirection::Vertical {
+                    SCROLL_VERTICAL_ACTION
+                } else {
+                    continue;
+                };
+
+                match handle_button_action(button_channel, action_str, delta.to_string(), shutdown_clone).await
+                {
+                    Ok(_) => (),
+                    Err(e) => eprintln!("Failed to handle button action: {}", e),
+                }
+            }
+
             message_loop::Event::MouseMoveRelative { x, y } => {
                 if x == 0 && y == 0 {
                     continue;

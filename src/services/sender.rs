@@ -6,6 +6,7 @@ use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Barrier;
 
+use crate::front_connection::front_protocol::FrontConnection;
 use crate::gstreamer_pipeline::av_capture::start_capture;
 use crate::services::sender_utils::{get_handler, initialize_game};
 use crate::utils::shutdown::Shutdown;
@@ -189,14 +190,31 @@ impl SenderSide {
             println!("SENDER | Start session msg sended");
 
             println!("Press ctrl-c to stop");
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
-                    println!("Ended by ctrl c");
-                }
-                _ = shutdown.wait_for_shutdown() => {
-                    log::error!("RECEIVER | Error notifier signal");
-                }
-            };
+
+            let shutdown_cpy = shutdown.clone();
+            //TODO: MODULARIZAR PIBE
+            let handle = tokio::task::spawn(async move {
+                let mut front_connection = match FrontConnection::new("3132").await {
+                    Ok(f) => f,
+                    Err(_) => {
+                        shutdown_cpy.notify_error(true, "Front connection").await;
+                        return;
+                    }
+                };
+                if let Err(e) = front_connection.waiting_to_disconnect().await {
+                    log::error!("Error waiting to disconnect | {:?}", e);
+                    shutdown_cpy
+                        .notify_error(true, "Waiting to disconnect")
+                        .await;
+                    return;
+                };
+                println!("Ended by disconnect signal");
+                shutdown_cpy.notify_error(true, "").await;
+            });
+
+            shutdown.wait_for_shutdown().await;
+            handle.abort();
+
             ws.stop_session(offerer_name, client_info.client_name.as_str())
                 .await?;
         }

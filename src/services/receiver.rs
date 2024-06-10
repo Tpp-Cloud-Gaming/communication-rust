@@ -160,15 +160,19 @@ impl ReceiverSide {
         }
 
         println!("Press ctrl-c to stop");
-        tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
-                log::info!("RECEIVER | ctrl-c signal");
-                println!();
-            }
-            _ = shutdown.wait_for_shutdown() => {
-                log::info!("RECEIVER | Error notifier signal");
-            }
-        };
+        let mut shutdown_signal: bool = false;
+        while !shutdown_signal {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    println!("Ended by ctrl c");
+                    shutdown.notify_error(true, "").await;
+                }
+                _ = shutdown.wait_for_shutdown() => {
+                    shutdown_signal = true;
+                    log::error!("RECEIVER | Error notifier signal");
+                }
+            };
+        }
 
         if peer_connection.close().await.is_err() {
             return Err(Error::new(

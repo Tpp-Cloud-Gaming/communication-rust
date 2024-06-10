@@ -25,7 +25,7 @@ async fn main() -> Result<(), Error> {
 
     loop {
         println!("Ready to start");
-        let mut front_connection = FrontConnection::new().await?;
+        let mut front_connection = FrontConnection::new("2930").await?;
         let client = front_connection.waiting_to_start().await?;
 
         match client.client_type {

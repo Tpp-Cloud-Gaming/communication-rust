@@ -20,8 +20,8 @@ pub struct Client {
 }
 
 impl FrontConnection {
-    pub async fn new() -> Result<FrontConnection, Error> {
-        let listener = TcpListener::bind("127.0.0.1:2930").await?;
+    pub async fn new(port: &str) -> Result<FrontConnection, Error> {
+        let listener = TcpListener::bind("127.0.0.1:".to_string() + port).await?;
         let (socket, _) = listener.accept().await?;
         let (tx, rx) = mpsc::channel(100);
         tokio::spawn(async move {
@@ -72,6 +72,19 @@ impl FrontConnection {
                         user_to_connect: Some(user_to_connect),
                         game_name: Some(game_name),
                     });
+                }
+                _ => continue,
+            }
+        }
+    }
+
+    pub async fn waiting_to_disconnect(&mut self) -> Result<(), Error> {
+        loop {
+            let mut msg = self.read_message().await?;
+            msg = msg.trim_end_matches('\n').to_string();
+            match msg.as_str() {
+                "disconnect" => {
+                    return Ok(());
                 }
                 _ => continue,
             }

@@ -147,9 +147,15 @@ pub async fn start_capture(
 ) {
     shutdown.add_task("Capture").await;
 
-    barrier.wait().await;
-
-    println!("CAPTURE | Barrier passed");
+    tokio::select! {
+        _ = shutdown.wait_for_error() => {
+            log::error!("CAPTURE | ERROR NOTIFIED");
+            return;
+        },
+        _ = barrier.wait() => {
+            println!("CAPTURE | Barrier passed");
+        }
+    }
 
     let new_framerate = gstreamer::Fraction::new(GSTREAMER_FRAMES, 1);
     let video_caps = gstreamer::Caps::builder("video/x-raw")

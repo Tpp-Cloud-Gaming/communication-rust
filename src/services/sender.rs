@@ -173,23 +173,34 @@ impl SenderSide {
         let client_sdp = ws.wait_for_client_sdp().await?;
         check_error(comunication.set_sdp(client_sdp).await, &shutdown).await?;
 
-        barrier.wait().await;
-        ws.start_session(offerer_name, client_info.client_name.as_str())
-            .await?;
-        println!("SENDER | Start session msg sended");
-
-        println!("Press ctrl-c to stop");
+        let mut barrier_passed: bool = false;
         tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
-                println!("Ended by ctrl c");
+            _ = barrier.wait() => {
+                barrier_passed = true
             }
             _ = shutdown.wait_for_shutdown() => {
                 log::error!("RECEIVER | Error notifier signal");
             }
         };
 
-        ws.stop_session(offerer_name, client_info.client_name.as_str())
-            .await?;
+        if barrier_passed {
+            ws.start_session(offerer_name, client_info.client_name.as_str())
+                .await?;
+            println!("SENDER | Start session msg sended");
+
+            println!("Press ctrl-c to stop");
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    println!("Ended by ctrl c");
+                }
+                _ = shutdown.wait_for_shutdown() => {
+                    log::error!("RECEIVER | Error notifier signal");
+                }
+            };
+            ws.stop_session(offerer_name, client_info.client_name.as_str())
+                .await?;
+        }
+
         kill_process(pid)?;
 
         if pc.close().await.is_err() {
@@ -410,8 +421,16 @@ async fn start_audio_sending(
     shutdown: &mut shutdown::Shutdown,
 ) {
     shutdown.add_task("Audio sending").await;
-    // Wait for other tasks
-    barrier_audio_send.wait().await;
+
+    tokio::select! {
+        _ = shutdown.wait_for_error() => {
+            log::error!("SENDER | START AUDIO SENDING | Shutdown signal received");
+            return;
+        },
+        _ = barrier_audio_send.wait() => {
+            log::info!("SENDER | START AUDIO SENDING | Barrier passed");
+        }
+    }
 
     let mut error_tracker_write =
         crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
@@ -487,9 +506,16 @@ async fn start_video_sending(
     shutdown: &mut shutdown::Shutdown,
 ) {
     shutdown.add_task("Video sending").await;
-    // Wait for connection established
-    // TODO: Esto puede generar delay me parece
-    barrier_video_send.wait().await;
+
+    tokio::select! {
+        _ = shutdown.wait_for_error() => {
+            log::error!("SENDER | START VIDEO SENDING | Shutdown signal received");
+            return;
+        },
+        _ =  barrier_video_send.wait() => {
+            log::info!("SENDER | START VIDEO SENDING | Barrier passed");
+        }
+    }
 
     let mut error_tracker_write =
         crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);

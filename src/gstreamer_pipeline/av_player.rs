@@ -32,8 +32,17 @@ pub async fn start_player(
     shutdown: &mut shutdown::Shutdown,
     barrier: Arc<Barrier>,
 ) {
-    barrier.wait().await;
     shutdown.add_task("Start player").await;
+
+    tokio::select! {
+        _ = shutdown.wait_for_error() => {
+            log::error!("CAPTURE | ERROR NOTIFIED");
+            return;
+        },
+        _ = barrier.wait() => {
+            println!("START PLAYER | Barrier passed");
+        }
+    }
 
     // Create the caps
     let video_caps = gstreamer::Caps::builder("application/x-rtp")

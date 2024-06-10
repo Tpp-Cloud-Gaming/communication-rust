@@ -29,28 +29,69 @@ impl ButtonController {
             Box::pin(async move {
                 let s = String::from_utf8_lossy(&msg.data);
                 let (action, rest) = s.split_at(1);
-                let key = match rest.parse::<u8>() {
-                    Ok(k) => k,
-                    Err(e) => {
-                        log::error!("BUTTON CONTROLLER | Error parsing u8: {}", e);
-                        return;
-                    }
-                };
 
                 match action {
                     PRESS_KEYBOARD_ACTION => {
+                        let key = match rest.parse::<u8>() {
+                            Ok(k) => k,
+                            Err(e) => {
+                                log::error!("BUTTON CONTROLLER | Error parsing u8: {}", e);
+                                return;
+                            }
+                        };
                         send_input_key(key as i32, false);
                     }
                     RELEASE_KEYBOARD_ACTION => {
+                        let key = match rest.parse::<u8>() {
+                            Ok(k) => k,
+                            Err(e) => {
+                                log::error!("BUTTON CONTROLLER | Error parsing u8: {}", e);
+                                return;
+                            }
+                        };
                         send_input_key(key as i32, true);
                     }
                     PRESS_MOUSE_ACTION => {
+                        let key = match rest.parse::<u8>() {
+                            Ok(k) => k,
+                            Err(e) => {
+                                log::error!("BUTTON CONTROLLER | Error parsing u8: {}", e);
+                                return;
+                            }
+                        };
                         let button = get_mouse_button(key);
                         winput::press(button);
                     }
                     RELEASE_MOUSE_ACTION => {
+                        let key = match rest.parse::<u8>() {
+                            Ok(k) => k,
+                            Err(e) => {
+                                log::error!("BUTTON CONTROLLER | Error parsing u8: {}", e);
+                                return;
+                            }
+                        };
                         let button = get_mouse_button(key);
                         winput::release(button);
+                    }
+                    SCROLL_HORIZONTAL_ACTION => {
+                        let delta = match rest.parse::<f32>() {
+                            Ok(k) => k,
+                            Err(e) => {
+                                log::error!("BUTTON CONTROLLER | Error parsing f32: {}", e);
+                                return;
+                            }
+                        };
+                        winput::Mouse::scrollh(delta);
+                    }
+                    SCROLL_VERTICAL_ACTION => {
+                        let delta = match rest.parse::<f32>() {
+                            Ok(k) => k,
+                            Err(e) => {
+                                log::error!("BUTTON CONTROLLER | Error parsing f32: {}", e);
+                                return;
+                            }
+                        };
+                        winput::Mouse::scroll(delta)
                     }
                     _ => {}
                 }

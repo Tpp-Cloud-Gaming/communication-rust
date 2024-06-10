@@ -2,12 +2,13 @@ use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
-use winput::message_loop::EventReceiver;
+use winput::message_loop::{EventReceiver, MessageLoopError};
 use winput::{message_loop, Button, WheelDirection};
 use winput::{Action, Vk};
 
 use super::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
 use crate::output::output_const::*;
+use crate::services::receiver;
 use crate::utils::shutdown;
 
 /// # InputCapture
@@ -64,10 +65,16 @@ impl InputCapture {
 
         let receiver: EventReceiver = match message_loop::start() {
             Ok(receiver) => receiver,
-            Err(_e) => {
+            Err(MessageLoopError::AlreadyActive) => {
                 return Err(Error::new(
                     ErrorKind::Other,
-                    "Error setting local description",
+                    "INPUT CAPTURE | Failed to start: Already active",
+                ))
+            }
+            Err(MessageLoopError::OsError(e)) => {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    std::format!("INPUT CAPTURE | Failed to start: Os Error {}", e),
                 ))
             }
         };
@@ -79,7 +86,6 @@ impl InputCapture {
             }
             _ = start_handler(receiver, self.button_channel.clone(), self.mouse_channel.clone(),self.shutdown.clone()) => {
                 message_loop::stop();
-
             }
         }
         Ok(())
@@ -164,7 +170,13 @@ async fn start_handler(
                     continue;
                 };
 
-                match handle_button_action(button_channel, action_str, delta.to_string(), shutdown_clone).await
+                match handle_button_action(
+                    button_channel,
+                    action_str,
+                    delta.to_string(),
+                    shutdown_clone,
+                )
+                .await
                 {
                     Ok(_) => (),
                     Err(e) => eprintln!("Failed to handle button action: {}", e),

@@ -41,7 +41,7 @@ async fn main() -> Result<(), Error> {
                     println!("Connection Missed. \nRestarting...");
                     continue;
                 }
-                break;
+                continue;
             }
             ClientType::SENDER => {
                 if (SenderSide::init(&client.username, &mut ws).await).is_err() {

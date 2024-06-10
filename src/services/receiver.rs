@@ -4,6 +4,7 @@ use std::sync::{mpsc, Arc};
 use crate::gstreamer_pipeline::av_player::start_player;
 use crate::input::input_capture::InputCapture;
 
+use crate::utils::common_utils::wait_disconnect;
 use crate::utils::error_tracker::ErrorTracker;
 use crate::utils::shutdown;
 use crate::utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
@@ -159,21 +160,12 @@ impl ReceiverSide {
             log::error!("RECEIVER | Generate local_description failed!");
         }
 
-        println!("Press ctrl-c to stop");
-        let mut shutdown_signal: bool = false;
-        while !shutdown_signal {
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
-                    println!("Ended by ctrl c");
-                    shutdown.notify_error(true, "").await;
-                }
-                _ = shutdown.wait_for_shutdown() => {
-                    shutdown_signal = true;
-                    log::error!("RECEIVER | Error notifier signal");
-                }
-            };
-        }
+        let handle = wait_disconnect(shutdown.clone());
 
+        println!("Press ctrl-c to stop");
+        shutdown.wait_for_shutdown().await;
+
+        handle.abort();
         if peer_connection.close().await.is_err() {
             return Err(Error::new(
                 ErrorKind::Other,

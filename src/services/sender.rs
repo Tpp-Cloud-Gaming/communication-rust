@@ -9,6 +9,7 @@ use tokio::sync::Barrier;
 use crate::front_connection::front_protocol::FrontConnection;
 use crate::gstreamer_pipeline::av_capture::start_capture;
 use crate::services::sender_utils::{get_handler, initialize_game};
+use crate::utils::common_utils::wait_disconnect;
 use crate::utils::shutdown::Shutdown;
 use crate::webrtcommunication::communication::{encode, Communication};
 
@@ -191,26 +192,7 @@ impl SenderSide {
 
             println!("Press ctrl-c to stop");
 
-            let shutdown_cpy = shutdown.clone();
-            //TODO: MODULARIZAR PIBE
-            let handle = tokio::task::spawn(async move {
-                let mut front_connection = match FrontConnection::new("3132").await {
-                    Ok(f) => f,
-                    Err(_) => {
-                        shutdown_cpy.notify_error(true, "Front connection").await;
-                        return;
-                    }
-                };
-                if let Err(e) = front_connection.waiting_to_disconnect().await {
-                    log::error!("Error waiting to disconnect | {:?}", e);
-                    shutdown_cpy
-                        .notify_error(true, "Waiting to disconnect")
-                        .await;
-                    return;
-                };
-                println!("Ended by disconnect signal");
-                shutdown_cpy.notify_error(true, "").await;
-            });
+            let handle = wait_disconnect(shutdown.clone());
 
             shutdown.wait_for_shutdown().await;
             handle.abort();

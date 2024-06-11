@@ -1,9 +1,15 @@
+use std::ffi::OsStr;
 use std::io::{Error, ErrorKind};
+use std::os::windows::ffi::OsStrExt;
+use std::thread::sleep;
+use std::time::Duration;
+use std::{iter, ptr};
 use std::sync::Arc;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
+use winapi::um::{libloaderapi, winuser};
 use winput::message_loop::{EventReceiver, MessageLoopError};
-use winput::{message_loop, Button, WheelDirection};
+use winput::{message_loop, Button, WheelDirection, WindowsError};
 use winput::{Action, Vk};
 
 use super::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
@@ -63,6 +69,9 @@ impl InputCapture {
     pub async fn start(&mut self) -> Result<(), Error> {
         self.shutdown.add_task("Input Capture").await;
 
+        if message_loop::is_active() {
+            println!("MSG LOOP | YA ESTA ACTIVO");
+        }
         let receiver: EventReceiver = match message_loop::start() {
             Ok(receiver) => receiver,
             Err(MessageLoopError::AlreadyActive) => {
@@ -79,15 +88,37 @@ impl InputCapture {
             }
         };
 
-        tokio::select! {
-            _ = self.shutdown.wait_for_error() => {
-                log::info!("INPUT CAPTURE | Shutdown received");
-                message_loop::stop();
-            }
-            _ = start_handler(receiver, self.button_channel.clone(), self.mouse_channel.clone(),self.shutdown.clone()) => {
-                message_loop::stop();
+        // tokio::select! {
+        //     _ = self.shutdown.wait_for_error() => {
+        //         log::info!("INPUT CAPTURE | Shutdown received");
+        //         message_loop::stop();
+        //     }
+        //     _ = start_handler(receiver, self.button_channel.clone(), self.mouse_channel.clone(),self.shutdown.clone()) => {
+        //         message_loop::stop();
+        //     }
+        // }
+        start_handler(receiver, self.button_channel.clone(), self.mouse_channel.clone(),self.shutdown.clone()).await;
+
+        message_loop::stop();
+
+        sleep(Duration::from_millis(20000));
+        // Retreives the module handle of the application.
+        unsafe {
+            let h_instance = libloaderapi::GetModuleHandleW(ptr::null());
+    
+            // Create the window.
+            let class_name = OsStr::new("winput_message_loop")
+                .encode_wide()
+                .chain(iter::once(0))
+                .collect::<Vec<_>>();
+
+            let class = winuser::UnregisterClassW(class_name.as_ptr(), h_instance);
+            if class == 0 {
+                let error= std::format!("INPUT CAPTURE | Failed to start: Os Error {}", WindowsError::from_last_error());
+                println!("UNREGISTER | {}", error);
             }
         }
+
         Ok(())
     }
 }
@@ -161,7 +192,7 @@ async fn start_handler(
                 if delta == 0.0 {
                     continue;
                 }
-
+ 
                 let action_str = if direction == WheelDirection::Horizontal {
                     SCROLL_HORIZONTAL_ACTION
                 } else if direction == WheelDirection::Vertical {
@@ -205,7 +236,9 @@ async fn start_handler(
         }
 
         if shutdown.check_for_error().await {
-            log::info!("INPUT CAPTURE | Shutdown received on check for error");
+            log::error!("INPUT CAPTURE | Shutdown received on check for error");
+            receiver.clear();
+            drop(receiver);
             break;
         };
 

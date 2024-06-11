@@ -22,7 +22,9 @@ if __name__ == "__main__":
     server_host = "localhost"  # Replace with the actual server address
     server_port = 2930  # Replace with the desired port numbers
     #message_to_send = "startGameWithUser|axel|ElLeon|Stranded Deep\n"
-    message_to_send = "startGameWithUser|axel|ElLeon|Q.U.B.E. 2\n"
+    message_to_send = "startGameWithUser|axel|franco_god|Cuphead\n"
     #message_to_send = "startOffering|franco_god\n"
 
+    #server_port = 3132
+    #message_to_send = "disconnect\n"
     send_string_to_port(server_host, server_port, message_to_send)

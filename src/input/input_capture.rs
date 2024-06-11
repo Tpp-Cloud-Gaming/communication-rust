@@ -1,10 +1,10 @@
 use std::ffi::OsStr;
 use std::io::{Error, ErrorKind};
 use std::os::windows::ffi::OsStrExt;
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{iter, ptr};
-use std::sync::Arc;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use winapi::um::{libloaderapi, winuser};
@@ -88,24 +88,31 @@ impl InputCapture {
             }
         };
 
-        // tokio::select! {
-        //     _ = self.shutdown.wait_for_error() => {
-        //         log::info!("INPUT CAPTURE | Shutdown received");
-        //         message_loop::stop();
-        //     }
-        //     _ = start_handler(receiver, self.button_channel.clone(), self.mouse_channel.clone(),self.shutdown.clone()) => {
-        //         message_loop::stop();
-        //     }
-        // }
-        start_handler(receiver, self.button_channel.clone(), self.mouse_channel.clone(),self.shutdown.clone()).await;
+        tokio::select! {
+            _ = self.shutdown.wait_for_error() => {
+                log::info!("INPUT CAPTURE | Shutdown received");
+            }
+            _ = start_handler(receiver, self.button_channel.clone(), self.mouse_channel.clone(),self.shutdown.clone()) => {
 
-        message_loop::stop();
+            }
+        }
 
-        sleep(Duration::from_millis(20000));
+        unregister_class_w();
+
+        Ok(())
+    }
+}
+
+// Unregister the class created by the message loop
+// This is necessary to start the message loop again
+fn unregister_class_w() {
+    let mut attempts = 0;
+
+    while attempts < 5 {
         // Retreives the module handle of the application.
         unsafe {
             let h_instance = libloaderapi::GetModuleHandleW(ptr::null());
-    
+
             // Create the window.
             let class_name = OsStr::new("winput_message_loop")
                 .encode_wide()
@@ -113,14 +120,24 @@ impl InputCapture {
                 .collect::<Vec<_>>();
 
             let class = winuser::UnregisterClassW(class_name.as_ptr(), h_instance);
-            if class == 0 {
-                let error= std::format!("INPUT CAPTURE | Failed to start: Os Error {}", WindowsError::from_last_error());
-                println!("UNREGISTER | {}", error);
+            if class != 0 {
+                return; // Unregistration successful, exit the function
             }
         }
 
-        Ok(())
+        // Unregistration failed, print the error and try again
+        let error = std::format!(
+            "INPUT CAPTURE | Failed to start: Os Error {}",
+            WindowsError::from_last_error()
+        );
+        println!("UNREGISTER | Attempt {} failed: {}", attempts + 1, error);
+
+        // Sleep for a short duration before the next attempt
+        sleep(Duration::from_millis(1000));
+        attempts += 1;
     }
+
+    println!("UNREGISTER | All attempts failed");
 }
 
 /// Starts the input handler by listening for input events and sending them through the data channels.
@@ -192,7 +209,7 @@ async fn start_handler(
                 if delta == 0.0 {
                     continue;
                 }
- 
+
                 let action_str = if direction == WheelDirection::Horizontal {
                     SCROLL_HORIZONTAL_ACTION
                 } else if direction == WheelDirection::Vertical {

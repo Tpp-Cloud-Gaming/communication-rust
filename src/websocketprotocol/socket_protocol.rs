@@ -147,7 +147,7 @@ impl WsProtocol {
         }
     }
 
-    pub async fn stop_session(&mut self, offerer: &str, client: &str)-> Result<(), Error> {
+    pub async fn stop_session(&mut self, offerer: &str, client: &str) -> Result<(), Error> {
         match self
             .ws
             .send_text(format!("stopSession|{}|{}", offerer, client))
@@ -158,15 +158,11 @@ impl WsProtocol {
         }
     }
 
-
-    pub async fn close_connection(&mut self)-> Result<(), Error> {
-        if let Err(_) = self.ws.close(None).await{
+    pub async fn close_connection(&mut self) -> Result<(), Error> {
+        if let Err(_) = self.ws.close(None).await {
             Err(Error::new(ErrorKind::Other, "Error closing connection"))
-        }else{
+        } else {
             Ok(())
         }
-            
     }
-
-
 }

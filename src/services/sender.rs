@@ -1,6 +1,5 @@
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
-use std::thread;
 use std::time::Duration;
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
@@ -39,7 +38,7 @@ use crate::utils::webrtc_const::{
     STREAM_TRACK_ID, STUN_ADRESS, VIDEO_TRACK_ID,
 };
 use crate::webrtcommunication::latency::Latency;
-use crate::websocketprotocol::socket_protocol::WsProtocol;
+use crate::websocketprotocol::socket_protocol::{ClientInfo, WsProtocol};
 
 pub struct SenderSide {}
 impl SenderSide {
@@ -48,12 +47,28 @@ impl SenderSide {
 
         // Wait for client to request a connection
         ws.init_offer(offerer_name).await?;
-        let client_info = ws.wait_for_game_solicitude().await?;
+        let mut client_info: Option<ClientInfo> = None;
+
+        tokio::select! {
+            cf = ws.wait_for_game_solicitude() => {
+                client_info = Some(cf?);
+            }
+            f = FrontConnection::new("3132") => {
+                f.unwrap().waiting_to_disconnect().await;
+                return Ok(());
+            }
+        }
 
         log::info!("SENDER | Received client info | {:?}", client_info);
 
+        let new_client = match client_info {
+            Some(c) => c,
+            None => {
+                return Err(Error::new(ErrorKind::Other, "Error receiving client info"));
+            }
+        };
         // Start game
-        let game_path = &client_info.game_path;
+        let game_path = &new_client.game_path;
 
         initialize_game(game_path)?;
 
@@ -160,8 +175,7 @@ impl SenderSide {
         if let Some(local_desc) = pc.local_description().await {
             let json_str = serde_json::to_string(&local_desc)?;
             let b64 = encode(&json_str);
-            ws.send_sdp_to_client(&client_info.client_name, &b64)
-                .await?;
+            ws.send_sdp_to_client(&new_client.client_name, &b64).await?;
             println!("{b64}");
         } else {
             log::error!("SENDER | Generate local_description failed");
@@ -186,7 +200,7 @@ impl SenderSide {
         };
 
         if barrier_passed {
-            ws.start_session(offerer_name, client_info.client_name.as_str())
+            ws.start_session(offerer_name, new_client.client_name.as_str())
                 .await?;
             println!("SENDER | Start session msg sended");
 
@@ -197,7 +211,7 @@ impl SenderSide {
             shutdown.wait_for_shutdown().await;
             handle.abort();
 
-            ws.stop_session(offerer_name, client_info.client_name.as_str())
+            ws.stop_session(offerer_name, new_client.client_name.as_str())
                 .await?;
         }
 

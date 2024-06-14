@@ -21,13 +21,13 @@ async fn main() -> Result<(), Error> {
     env_logger::builder().format_target(false).init();
     // Initialize GStreamer
     gstreamer::init().unwrap();
-    let mut ws = WsProtocol::ws_protocol().await?;
-
+    
     loop {
+        let mut ws = WsProtocol::ws_protocol().await?;
         println!("Ready to start");
         let mut front_connection = FrontConnection::new("2930").await?;
         let client = front_connection.waiting_to_start().await?;
-
+        
         match client.client_type {
             ClientType::RECEIVER => {
                 let offerer_username = client
@@ -39,14 +39,19 @@ async fn main() -> Result<(), Error> {
                     .is_err()
                 {
                     println!("Connection Missed. \nRestarting...");
+                    ws.close_connection().await?;
                     continue;
                 }
+                ws.close_connection().await?;
                 continue;
             }
             ClientType::SENDER => {
-                if (SenderSide::init(&client.username, &mut ws).await).is_err() {
-                    continue;
-                }
+                if let Err(e) = SenderSide::init(&client.username, &mut ws).await {
+                    println!("MAIN EXITED WITH ERROR {:?}", e);
+                    ws.close_connection().await?;
+                    
+                } 
+                
             }
         }
     }

@@ -159,4 +159,14 @@ impl WsProtocol {
     }
 
 
+    pub async fn close_connection(&mut self)-> Result<(), Error> {
+        if let Err(_) = self.ws.close(None).await{
+            Err(Error::new(ErrorKind::Other, "Error closing connection"))
+        }else{
+            Ok(())
+        }
+            
+    }
+
+
 }

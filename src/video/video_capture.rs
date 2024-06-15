@@ -18,7 +18,7 @@ pub fn create_elements(
     let d3d11screencapturesrc = gstreamer::ElementFactory::make("d3d11screencapturesrc")
         .name("d3d11screencapturesrc")
         .property("show-cursor", true)
-        .property("window-handle", 0 as u64)
+        .property("window-handle", window_handle)
         .property_from_str("capture-api", "wgc")
         .property("adapter", 0)
         .build()?;

@@ -213,7 +213,6 @@ impl SenderSide {
                     wait_shutdown = true;
                 }
                 _  = wait_disconnect(shutdown.clone()) => {
-
                     log::info!("SENDER | Disconnect signal received");
                     ws.force_stop_session(offerer_name).await?;
                 }

@@ -164,12 +164,12 @@ impl ReceiverSide {
         tokio::select! {
             _ = shutdown.wait_for_shutdown() => {
                 log::info!("SENDER | Shutdown signal received");
-                ws.force_stop_session(offerer_name).await?;
+                ws.force_stop_session(client_name).await?;
                 wait_shutdown = true;
             }
             _ = wait_disconnect(shutdown.clone()) => {
                 log::info!("SENDER | Disconnect signal received");
-                ws.force_stop_session(offerer_name).await?;
+                ws.force_stop_session(client_name).await?;
             }
             _ = ws.wait_for_stop_session() => {
                 log::info!("SENDER | Stop session signal received");

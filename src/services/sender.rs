@@ -1,3 +1,4 @@
+use gstreamer::glib::JoinHandle;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;
@@ -211,7 +212,8 @@ impl SenderSide {
                     ws.force_stop_session(offerer_name).await?;
                     wait_shutdown = true;
                 }
-                _ = wait_disconnect(shutdown.clone()) => {
+                _  = wait_disconnect(shutdown.clone()) => {
+
                     log::info!("SENDER | Disconnect signal received");
                     ws.force_stop_session(offerer_name).await?;
                 }

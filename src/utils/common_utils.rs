@@ -37,23 +37,25 @@ pub fn get_args() -> Option<String> {
 
 pub fn wait_disconnect(mut shutdown: Shutdown) -> tokio::task::JoinHandle<()> {
     return tokio::task::spawn(async move {
-        shutdown.add_task("Waiting to disconnect").await;
-        let mut front_connection = match FrontConnection::new("3132").await {
-            Ok(f) => f,
-            Err(_) => {
-                shutdown.notify_error(true, "Front connection").await;
-                return;
-            }
-        };
+        shutdown.add_task("wait_disconnect").await;
         tokio::select! {
             _ = shutdown.wait_for_error() => {
                 println!("Ended by shutdown signal");
                 return;
             }
-            _ = front_connection.waiting_to_disconnect() => {
-                log::error!("Ended by disconnect signal");
-                shutdown.notify_error(true, "").await;
-                return;
+            f = FrontConnection::new("3132") => {
+                match f {
+                    Ok(mut front_connection) => {
+                        front_connection.waiting_to_disconnect().await;
+                        println!("Ended by disconnect signal");
+                        shutdown.notify_error(false, "").await;
+                        return;
+                    },
+                    Err(_) => {
+                        shutdown.notify_error(false, "Front connection").await;
+                        return;
+                    }
+                }
             }
         }
     });

@@ -204,15 +204,26 @@ impl SenderSide {
                 .await?;
             println!("SENDER | Start session msg sended");
 
-            println!("Press ctrl-c to stop");
+            let mut wait_shutdown: bool = false;
+            tokio::select! {
+                _ = shutdown.wait_for_shutdown() => {
+                    log::info!("SENDER | Shutdown signal received");
+                    ws.force_stop_session(offerer_name).await?;
+                    wait_shutdown = true;
+                }
+                _ = wait_disconnect(shutdown.clone()) => {
+                    log::info!("SENDER | Disconnect signal received");
+                    ws.force_stop_session(offerer_name).await?;
+                }
+                _ = ws.wait_for_stop_session() => {
+                    log::info!("SENDER | Stop session signal received");
+                    shutdown.notify_error(true, "Stop session signal received").await;
+                }
+            }
 
-            let handle = wait_disconnect(shutdown.clone());
-
-            shutdown.wait_for_shutdown().await;
-            handle.abort();
-
-            ws.stop_session(offerer_name, new_client.client_name.as_str())
-                .await?;
+            if !wait_shutdown {
+                shutdown.wait_for_shutdown().await;
+            }
         }
 
         kill_process(pid)?;

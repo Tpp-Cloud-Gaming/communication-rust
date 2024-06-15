@@ -147,14 +147,17 @@ impl WsProtocol {
         }
     }
 
-    pub async fn stop_session(&mut self, offerer: &str, client: &str) -> Result<(), Error> {
+    pub async fn force_stop_session(&mut self, username: &str) -> Result<(), Error> {
         match self
             .ws
-            .send_text(format!("stopSession|{}|{}", offerer, client))
+            .send_text(format!("forceStopSession|{}", username))
             .await
         {
             Ok(_) => Ok(()),
-            Err(_) => Err(Error::new(ErrorKind::Other, "Error sending sdp message")),
+            Err(_) => Err(Error::new(
+                ErrorKind::Other,
+                "Error sending force_stop_session message",
+            )),
         }
     }
 
@@ -163,6 +166,24 @@ impl WsProtocol {
             Err(Error::new(ErrorKind::Other, "Error closing connection"))
         } else {
             Ok(())
+        }
+    }
+
+    pub async fn wait_for_stop_session(&mut self) -> Result<String, Error> {
+        let msg = match self.ws.receive().await {
+            Ok(msg) => msg,
+            Err(_) => {
+                return Err(Error::new(ErrorKind::Other, "Error receiving message"));
+            }
+        };
+        let response = msg.as_text().unwrap().0;
+        let parts: Vec<&str> = response.split('|').collect();
+        match parts[0] {
+            "stopSessionByTimer" => {
+                let sdp = parts[1];
+                Ok(sdp.to_string())
+            }
+            _ => Err(Error::new(ErrorKind::InvalidData, "Should be offerer sdp")),
         }
     }
 }

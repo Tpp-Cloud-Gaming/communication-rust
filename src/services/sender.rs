@@ -200,7 +200,8 @@ impl SenderSide {
         };
 
         if barrier_passed {
-            ws.start_session(offerer_name, new_client.client_name.as_str())
+            let session_minutes = new_client.minutes;
+            ws.start_session(offerer_name, new_client.client_name.as_str(),&session_minutes)
                 .await?;
             println!("SENDER | Start session msg sended");
 

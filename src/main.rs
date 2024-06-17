@@ -23,7 +23,7 @@ async fn main() -> Result<(), Error> {
     gstreamer::init().unwrap();
     
     loop {
-        let mut ws = WsProtocol::ws_protocol().await?;
+        let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
         println!("Ready to start");
         let mut front_connection = FrontConnection::new("2930").await?;
         let client = front_connection.waiting_to_start().await?;
@@ -35,7 +35,8 @@ async fn main() -> Result<(), Error> {
                     .expect("Missing offerer name parameter.");
 
                 let game_name = client.game_name.expect("Missign game name parameter.");
-                if (ReceiverSide::init(&client.username, &offerer_username, &game_name).await)
+                let minutes = client.minutes.expect("Missing parameter minutes");
+                if (ReceiverSide::init(&client.username, &offerer_username, &game_name,&minutes).await)
                     .is_err()
                 {
                     println!("Connection Missed. \nRestarting...");

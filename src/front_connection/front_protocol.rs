@@ -18,12 +18,13 @@ pub struct Client {
     pub username: String,
     pub user_to_connect: Option<String>,
     pub game_name: Option<String>,
+    pub minutes: Option<String>
 }
 
 impl FrontConnection {
     pub async fn new(port: &str) -> Result<FrontConnection, Error> {
         let listener = TcpListener::bind("127.0.0.1:".to_string() + port).await?;
-
+        
         let (socket, _) = listener.accept().await?;
         let (tx, rx) = mpsc::channel(100);
         tokio::spawn(async move {
@@ -61,17 +62,20 @@ impl FrontConnection {
                         username,
                         user_to_connect: None,
                         game_name: None,
+                        minutes: None
                     });
                 }
                 "startGameWithUser" => {
                     let username = parts[1].to_string();
                     let user_to_connect = parts[2].to_string();
-                    let game_name = parts[3].trim_end_matches('\n').to_string();
+                    let game_name = parts[3].to_string();
+                    let minutes = parts[4].trim_end_matches('\n').to_string();
                     return Ok(Client {
                         client_type: ClientType::RECEIVER,
                         username,
                         user_to_connect: Some(user_to_connect),
                         game_name: Some(game_name),
+                        minutes: Some(minutes)
                     });
                 }
                 _ => continue,

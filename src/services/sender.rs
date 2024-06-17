@@ -1,4 +1,3 @@
-use gstreamer::glib::JoinHandle;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use std::time::Duration;

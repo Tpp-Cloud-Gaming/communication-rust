@@ -86,12 +86,13 @@ impl WsProtocol {
         username: &str,
         offerer_username: &str,
         game_name: &str,
+        minutes: &str
     ) -> Result<(), Error> {
         match self
             .ws
             .send_text(format!(
-                "initClient|{}|{}|{}",
-                username, offerer_username, game_name
+                "initClient|{}|{}|{}|{}",
+                username, offerer_username, game_name, minutes
             ))
             .await
         {

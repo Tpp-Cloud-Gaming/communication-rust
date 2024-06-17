@@ -28,10 +28,10 @@ use crate::websocketprotocol::socket_protocol::WsProtocol;
 pub struct ReceiverSide {}
 
 impl ReceiverSide {
-    pub async fn init(client_name: &str, offerer_name: &str, game_name: &str) -> Result<(), Error> {
+    pub async fn init(client_name: &str, offerer_name: &str, game_name: &str, minutes: &str) -> Result<(), Error> {
         // Initialize Log:
         let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
-        ws.init_client(client_name, offerer_name, game_name).await?;
+        ws.init_client(client_name, offerer_name, game_name,minutes).await?;
 
         let shutdown = Shutdown::new();
 

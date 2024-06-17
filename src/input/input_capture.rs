@@ -14,7 +14,6 @@ use winput::{Action, Vk};
 
 use super::input_const::{KEYBOARD_CHANNEL_LABEL, MOUSE_CHANNEL_LABEL};
 use crate::output::output_const::*;
-use crate::services::receiver;
 use crate::utils::shutdown;
 
 /// # InputCapture

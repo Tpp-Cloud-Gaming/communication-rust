@@ -5,7 +5,6 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 pub struct FrontConnection {
     rx: mpsc::Receiver<String>,
-    listener: TcpListener,
 }
 
 pub enum ClientType {
@@ -43,7 +42,7 @@ impl FrontConnection {
                 tx.send(msg).await.expect("channel send failed");
             }
         });
-        Ok(FrontConnection { rx, listener })
+        Ok(FrontConnection { rx})
     }
     pub async fn read_message(&mut self) -> Result<String, Error> {
         let msg = self.rx.recv().await.expect("channel recv failed");

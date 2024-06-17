@@ -21,11 +21,11 @@ async fn main() -> Result<(), Error> {
     env_logger::builder().format_target(false).init();
     // Initialize GStreamer
     gstreamer::init().unwrap();
+    let mut front_connection = FrontConnection::new("2930").await?;
     
     loop {
         let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
         println!("Ready to start");
-        let mut front_connection = FrontConnection::new("2930").await?;
         let client = front_connection.waiting_to_start().await?;
         
         match client.client_type {
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Error> {
 
                 let game_name = client.game_name.expect("Missign game name parameter.");
                 let minutes = client.minutes.expect("Missing parameter minutes");
-                if (ReceiverSide::init(&client.username, &offerer_username, &game_name,&minutes).await)
+                if (ReceiverSide::init(&client.username, &offerer_username, &game_name,&minutes,&mut front_connection).await)
                     .is_err()
                 {
                     println!("Connection Missed. \nRestarting...");
@@ -47,7 +47,7 @@ async fn main() -> Result<(), Error> {
                 continue;
             }
             ClientType::SENDER => {
-                if let Err(e) = SenderSide::init(&client.username, &mut ws).await {
+                if let Err(e) = SenderSide::init(&client.username, &mut ws,&mut front_connection).await {
                     println!("MAIN EXITED WITH ERROR {:?}", e);
                     ws.close_connection().await?;
                     

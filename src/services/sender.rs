@@ -8,7 +8,6 @@ use tokio::sync::Barrier;
 use crate::front_connection::front_protocol::FrontConnection;
 use crate::gstreamer_pipeline::av_capture::start_capture;
 use crate::services::sender_utils::{get_handler, initialize_game};
-use crate::utils::common_utils::wait_disconnect;
 use crate::utils::shutdown::Shutdown;
 use crate::webrtcommunication::communication::{encode, Communication};
 
@@ -42,19 +41,18 @@ use crate::websocketprotocol::socket_protocol::{ClientInfo, WsProtocol};
 
 pub struct SenderSide {}
 impl SenderSide {
-    pub async fn init(offerer_name: &str, ws: &mut WsProtocol) -> Result<(), Error> {
+    pub async fn init(offerer_name: &str, ws: &mut WsProtocol,front_connection: &mut FrontConnection) -> Result<(), Error> {
         let shutdown = Shutdown::new();
 
         // Wait for client to request a connection
         ws.init_offer(offerer_name).await?;
-        let mut client_info: Option<ClientInfo> = None;
+        let client_info: Option<ClientInfo>;
 
         tokio::select! {
             cf = ws.wait_for_game_solicitude() => {
                 client_info = Some(cf?);
             }
-            f = FrontConnection::new("3132") => {
-                f.unwrap().waiting_to_disconnect().await;
+            _ = front_connection.waiting_to_disconnect() => {
                 return Ok(());
             }
         }
@@ -212,7 +210,7 @@ impl SenderSide {
                     ws.force_stop_session(offerer_name).await?;
                     wait_shutdown = true;
                 }
-                _  = wait_disconnect(shutdown.clone()) => {
+                _  = front_connection.waiting_to_disconnect() => {
                     log::info!("SENDER | Disconnect signal received");
                     ws.force_stop_session(offerer_name).await?;
                 }

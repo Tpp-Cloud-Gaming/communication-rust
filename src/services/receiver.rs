@@ -1,10 +1,10 @@
 use std::io::{Error, ErrorKind};
 use std::sync::{mpsc, Arc};
 
+use crate::front_connection::front_protocol::FrontConnection;
 use crate::gstreamer_pipeline::av_player::start_player;
 use crate::input::input_capture::InputCapture;
 
-use crate::utils::common_utils::wait_disconnect;
 use crate::utils::error_tracker::ErrorTracker;
 use crate::utils::shutdown;
 use crate::utils::webrtc_const::{READ_TRACK_LIMIT, READ_TRACK_THRESHOLD};
@@ -28,7 +28,7 @@ use crate::websocketprotocol::socket_protocol::WsProtocol;
 pub struct ReceiverSide {}
 
 impl ReceiverSide {
-    pub async fn init(client_name: &str, offerer_name: &str, game_name: &str, minutes: &str) -> Result<(), Error> {
+    pub async fn init(client_name: &str, offerer_name: &str, game_name: &str, minutes: &str,front_connection: &mut FrontConnection) -> Result<(), Error> {
         // Initialize Log:
         let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
         ws.init_client(client_name, offerer_name, game_name,minutes).await?;
@@ -167,7 +167,7 @@ impl ReceiverSide {
                 ws.force_stop_session(client_name).await?;
                 wait_shutdown = true;
             }
-            _ = wait_disconnect(shutdown.clone()) => {
+            _ = front_connection.waiting_to_disconnect() => {
                 log::info!("SENDER | Disconnect signal received");
                 ws.force_stop_session(client_name).await?;
             }

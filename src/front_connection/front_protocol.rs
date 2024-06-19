@@ -17,13 +17,13 @@ pub struct Client {
     pub username: String,
     pub user_to_connect: Option<String>,
     pub game_name: Option<String>,
-    pub minutes: Option<String>
+    pub minutes: Option<String>,
 }
 
 impl FrontConnection {
     pub async fn new(port: &str) -> Result<FrontConnection, Error> {
         let listener = TcpListener::bind("127.0.0.1:".to_string() + port).await?;
-        
+
         let (socket, _) = listener.accept().await?;
         let (tx, rx) = mpsc::channel(100);
         tokio::spawn(async move {
@@ -42,16 +42,25 @@ impl FrontConnection {
                 tx.send(msg).await.expect("channel send failed");
             }
         });
-        Ok(FrontConnection { rx})
+        Ok(FrontConnection { rx })
     }
     pub async fn read_message(&mut self) -> Result<String, Error> {
-        let msg = self.rx.recv().await.expect("channel recv failed");
+        let msg = self.rx.recv().await.expect("Failed to receive message");
         Ok(msg)
     }
 
     pub async fn waiting_to_start(&mut self) -> Result<Client, Error> {
         loop {
-            let msg = self.read_message().await?;
+            let msg = match self.rx.recv().await {
+                Some(m) => m,
+                None => {
+                    return Err(Error::new(
+                        std::io::ErrorKind::ConnectionAborted,
+                        "Flutter disconnected",
+                    ))
+                } //Significa que flutter se desconecto
+            };
+
             let parts: Vec<&str> = msg.split('|').collect();
             match parts[0] {
                 "startOffering" => {
@@ -61,7 +70,7 @@ impl FrontConnection {
                         username,
                         user_to_connect: None,
                         game_name: None,
-                        minutes: None
+                        minutes: None,
                     });
                 }
                 "startGameWithUser" => {
@@ -74,7 +83,7 @@ impl FrontConnection {
                         username,
                         user_to_connect: Some(user_to_connect),
                         game_name: Some(game_name),
-                        minutes: Some(minutes)
+                        minutes: Some(minutes),
                     });
                 }
                 _ => continue,

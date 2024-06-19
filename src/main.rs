@@ -22,12 +22,21 @@ async fn main() -> Result<(), Error> {
     // Initialize GStreamer
     gstreamer::init().unwrap();
     let mut front_connection = FrontConnection::new("2930").await?;
-    
+
     loop {
         let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
         println!("Ready to start");
-        let client = front_connection.waiting_to_start().await?;
-        
+
+        let client = match front_connection.waiting_to_start().await {
+            Ok(c) => c,
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::ConnectionAborted {
+                    break;
+                }
+                return Err(e);
+            }
+        };
+
         match client.client_type {
             ClientType::RECEIVER => {
                 let offerer_username = client
@@ -36,7 +45,14 @@ async fn main() -> Result<(), Error> {
 
                 let game_name = client.game_name.expect("Missign game name parameter.");
                 let minutes = client.minutes.expect("Missing parameter minutes");
-                if (ReceiverSide::init(&client.username, &offerer_username, &game_name,&minutes,&mut front_connection).await)
+                if (ReceiverSide::init(
+                    &client.username,
+                    &offerer_username,
+                    &game_name,
+                    &minutes,
+                    &mut front_connection,
+                )
+                .await)
                     .is_err()
                 {
                     println!("Connection Missed. \nRestarting...");
@@ -47,12 +63,12 @@ async fn main() -> Result<(), Error> {
                 continue;
             }
             ClientType::SENDER => {
-                if let Err(e) = SenderSide::init(&client.username, &mut ws,&mut front_connection).await {
+                if let Err(e) =
+                    SenderSide::init(&client.username, &mut ws, &mut front_connection).await
+                {
                     println!("MAIN EXITED WITH ERROR {:?}", e);
                     ws.close_connection().await?;
-                    
-                } 
-                
+                }
             }
         }
     }

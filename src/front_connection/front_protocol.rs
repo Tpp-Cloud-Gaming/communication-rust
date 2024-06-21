@@ -1,10 +1,12 @@
 use std::io::Error;
 use tokio::io::AsyncBufReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 pub struct FrontConnection {
     rx: mpsc::Receiver<String>,
+    tx_disconnect: mpsc::Sender<String>,
 }
 
 pub enum ClientType {
@@ -24,26 +26,47 @@ impl FrontConnection {
     pub async fn new(port: &str) -> Result<FrontConnection, Error> {
         let listener = TcpListener::bind("127.0.0.1:".to_string() + port).await?;
 
-        let (socket, _) = listener.accept().await?;
+        let mut socket = listener.accept().await?.0;
         let (tx, rx) = mpsc::channel(100);
+        let (tx_disconnect, mut rx_disconnect) = mpsc::channel(100);
+
         tokio::spawn(async move {
-            let mut reader = BufReader::new(socket);
+            let (socket_reader, mut socket_writer) = socket.split();
+            let mut reader = BufReader::new(socket_reader);
             loop {
                 let mut buffer = Vec::new();
-                let bytes_read = reader
-                    .read_until(b'\n', &mut buffer)
-                    .await
-                    .expect("Failed to read until newline");
-                if bytes_read == 0 {
-                    return;
-                };
-                let msg = String::from_utf8(buffer).expect("Failed to convert to string");
-                let msg = msg.trim_end_matches('\n').to_string();
-                tx.send(msg).await.expect("channel send failed");
+
+                tokio::select! {
+                    msg = rx_disconnect.recv() => {
+
+                        let rec_msg: String = match msg {
+                            Some(m) => m,
+                            None => continue,
+                        };
+                        let _ = socket_writer.write(rec_msg.as_bytes()).await;
+                    }
+                    bytes_read = reader
+                    .read_until(b'\n', &mut buffer) => {
+                        if bytes_read.expect("Failed to read until newline") == 0 {
+                            return;
+                        };
+                        let msg = String::from_utf8(buffer).expect("Failed to convert to string");
+                        let msg = msg.trim_end_matches('\n').to_string();
+                        tx.send(msg).await.expect("channel send failed");
+                    }
+                }
             }
         });
-        Ok(FrontConnection { rx })
+        Ok(FrontConnection { rx, tx_disconnect })
     }
+
+    pub async fn send_ready(&mut self) -> Result<(), Error> {
+        if let Err(e) = self.tx_disconnect.send("readyToStart".to_string()).await {
+            return Err(Error::new(std::io::ErrorKind::Other, e));
+        };
+        return Ok(());
+    }
+
     pub async fn read_message(&mut self) -> Result<String, Error> {
         let msg = self.rx.recv().await.expect("Failed to receive message");
         Ok(msg)
@@ -99,7 +122,10 @@ impl FrontConnection {
                 "disconnect" => {
                     return Ok(());
                 }
-                _ => continue,
+                _ => {
+                    print!("Message: {}", msg);
+                    continue;
+                }
             }
         }
     }

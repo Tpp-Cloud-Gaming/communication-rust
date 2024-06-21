@@ -27,6 +27,7 @@ async fn main() -> Result<(), Error> {
         let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
         println!("Ready to start");
 
+        front_connection.send_ready().await?;
         let client = match front_connection.waiting_to_start().await {
             Ok(c) => c,
             Err(e) => {

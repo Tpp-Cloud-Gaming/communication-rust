@@ -11,7 +11,7 @@ pub struct ClientInfo {
     pub client_name: String,
     pub game_name: String,
     pub game_path: String,
-    pub minutes: String
+    pub minutes: String,
 }
 
 impl WsProtocol {
@@ -47,7 +47,7 @@ impl WsProtocol {
                 client_name: parts[1].to_owned(),
                 game_name: parts[2].to_owned(),
                 game_path: parts[3].to_owned(),
-                minutes: parts[4].to_owned()
+                minutes: 60.to_string(),
             }),
             _ => Err(Error::new(ErrorKind::InvalidData, "Should be sdp request.")),
         }
@@ -88,7 +88,7 @@ impl WsProtocol {
         username: &str,
         offerer_username: &str,
         game_name: &str,
-        minutes: &str
+        minutes: &str,
     ) -> Result<(), Error> {
         match self
             .ws
@@ -139,10 +139,15 @@ impl WsProtocol {
         }
     }
 
-    pub async fn start_session(&mut self, offerer: &str, client: &str,minutes: &str) -> Result<(), Error> {
+    pub async fn start_session(
+        &mut self,
+        offerer: &str,
+        client: &str,
+        minutes: &str,
+    ) -> Result<(), Error> {
         match self
             .ws
-            .send_text(format!("startSession|{}|{}|{}", offerer, client,minutes))
+            .send_text(format!("startSession|{}|{}|{}", offerer, client, minutes))
             .await
         {
             Ok(_) => Ok(()),

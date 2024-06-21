@@ -21,13 +21,13 @@ async fn main() -> Result<(), Error> {
     env_logger::builder().format_target(false).init();
     // Initialize GStreamer
     gstreamer::init().unwrap();
+
     let mut front_connection = FrontConnection::new("2930").await?;
 
     loop {
         let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
         println!("Ready to start");
 
-        front_connection.send_ready().await?;
         let client = match front_connection.waiting_to_start().await {
             Ok(c) => c,
             Err(e) => {

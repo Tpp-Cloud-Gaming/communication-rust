@@ -41,7 +41,11 @@ use crate::websocketprotocol::socket_protocol::{ClientInfo, WsProtocol};
 
 pub struct SenderSide {}
 impl SenderSide {
-    pub async fn init(offerer_name: &str, ws: &mut WsProtocol,front_connection: &mut FrontConnection) -> Result<(), Error> {
+    pub async fn init(
+        offerer_name: &str,
+        ws: &mut WsProtocol,
+        front_connection: &mut FrontConnection,
+    ) -> Result<(), Error> {
         let shutdown = Shutdown::new();
 
         // Wait for client to request a connection
@@ -199,8 +203,12 @@ impl SenderSide {
 
         if barrier_passed {
             let session_minutes = new_client.minutes;
-            ws.start_session(offerer_name, new_client.client_name.as_str(),&session_minutes)
-                .await?;
+            ws.start_session(
+                offerer_name,
+                new_client.client_name.as_str(),
+                &session_minutes,
+            )
+            .await?;
             println!("SENDER | Start session msg sended");
 
             let mut wait_shutdown: bool = false;
@@ -213,6 +221,7 @@ impl SenderSide {
                 _  = front_connection.waiting_to_disconnect() => {
                     log::info!("SENDER | Disconnect signal received");
                     ws.force_stop_session(offerer_name).await?;
+                    shutdown.notify_error(true, "Stop session signal received").await;
                 }
                 _ = ws.wait_for_stop_session() => {
                     log::info!("SENDER | Stop session signal received");

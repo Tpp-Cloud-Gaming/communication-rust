@@ -4,11 +4,10 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use tokio::sync::Semaphore;
+use tokio::sync::Barrier;
 pub struct FrontConnection {
     rx: mpsc::Receiver<Client>,
-    ready_start_semaphore: Arc<Semaphore>,
-    disconnect_semaphore: Arc<Semaphore>,
+    disconnect_semaphore: Arc<Barrier>,
 }
 
 pub enum ClientType {
@@ -30,12 +29,12 @@ impl FrontConnection {
 
         let mut socket = listener.accept().await?.0;
 
-        let ready_start_semaphore = Arc::new(Semaphore::new(0));
-        let disconnect_semaphore = Arc::new(Semaphore::new(0));
+        //let disconnect_semaphore = Arc::new(Semaphore::new(0));
+        let disconnect_barrier = Arc::new(Barrier::new(2)); 
+
         let (tx, rx) = mpsc::channel(100);
 
-        let ready_start_cpy = ready_start_semaphore.clone();
-        let disconnect_cpy = disconnect_semaphore.clone();
+        let disconnect_cpy = disconnect_barrier.clone();
         tokio::spawn(async move {
             let (socket_reader, _socket_writer) = socket.split();
             let mut reader = BufReader::new(socket_reader);
@@ -50,7 +49,6 @@ impl FrontConnection {
                 handle_message(
                     tx.clone(),
                     msg,
-                    ready_start_cpy.clone(),
                     disconnect_cpy.clone(),
                 )
                 .await;
@@ -59,18 +57,11 @@ impl FrontConnection {
 
         Ok(FrontConnection {
             rx,
-            ready_start_semaphore,
-            disconnect_semaphore,
+            disconnect_semaphore: disconnect_barrier,
         })
     }
 
     pub async fn waiting_to_start(&mut self) -> Result<Client, Error> {
-        if let Err(_e) = self.ready_start_semaphore.acquire().await {
-            return Err(Error::new(
-                std::io::ErrorKind::Other,
-                "Waiting to start failed.",
-            ));
-        };
 
         match self.rx.recv().await {
             Some(client) => Ok(client),
@@ -82,12 +73,8 @@ impl FrontConnection {
     }
 
     pub async fn waiting_to_disconnect(&mut self) -> Result<(), Error> {
-        if let Err(_e) = self.disconnect_semaphore.acquire().await {
-            return Err(Error::new(
-                std::io::ErrorKind::Other,
-                "Waiting to start failed.",
-            ));
-        };
+        self.disconnect_semaphore.wait().await;            
+        
         Ok(())
     }
 }
@@ -95,10 +82,10 @@ impl FrontConnection {
 pub async fn handle_message(
     tx: mpsc::Sender<Client>,
     msg: String,
-    ready_start_semaphore: Arc<Semaphore>,
-    disconnect_semaphore: Arc<Semaphore>,
+    disconnect_semaphore: Arc<Barrier>,
 ) {
     let parts: Vec<&str> = msg.split('|').collect();
+    println!("Llego: {}",parts[0]);
     match parts[0] {
         "startOffering" => {
             let username = parts[1].trim_end_matches('\n').to_string();
@@ -110,7 +97,6 @@ pub async fn handle_message(
                 minutes: None,
             };
             tx.send(client).await.expect("Failed to send client."); //TODO: Handle error
-            ready_start_semaphore.add_permits(1);
         }
         "startGameWithUser" => {
             let username = parts[1].to_string();
@@ -125,10 +111,9 @@ pub async fn handle_message(
                 minutes: Some(minutes),
             };
             tx.send(client).await.expect("Failed to send client."); //TODO: Handle error
-            ready_start_semaphore.add_permits(1);
         }
         "disconnect" => {
-            disconnect_semaphore.add_permits(1);
+            disconnect_semaphore.wait().await;
         }
         _ => (),
     }

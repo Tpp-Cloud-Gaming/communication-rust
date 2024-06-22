@@ -1,13 +1,11 @@
 use std::io::Error;
-use std::sync::Arc;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use tokio::sync::Barrier;
 pub struct FrontConnection {
     rx: mpsc::Receiver<Client>,
-    disconnect_semaphore: Arc<Barrier>,
+    rx_disconnect: mpsc::Receiver<bool>,
 }
 
 pub enum ClientType {
@@ -29,12 +27,9 @@ impl FrontConnection {
 
         let mut socket = listener.accept().await?.0;
 
-        //let disconnect_semaphore = Arc::new(Semaphore::new(0));
-        let disconnect_barrier = Arc::new(Barrier::new(2)); 
-
         let (tx, rx) = mpsc::channel(100);
+        let (tx_disconnect, rx_disconnect) = mpsc::channel(100);
 
-        let disconnect_cpy = disconnect_barrier.clone();
         tokio::spawn(async move {
             let (socket_reader, _socket_writer) = socket.split();
             let mut reader = BufReader::new(socket_reader);
@@ -46,23 +41,14 @@ impl FrontConnection {
                 };
                 let msg = String::from_utf8(buffer).expect("Failed to convert to string");
                 let msg = msg.trim_end_matches('\n').to_string();
-                handle_message(
-                    tx.clone(),
-                    msg,
-                    disconnect_cpy.clone(),
-                )
-                .await;
+                handle_message(tx.clone(), tx_disconnect.clone(), msg).await;
             }
         });
 
-        Ok(FrontConnection {
-            rx,
-            disconnect_semaphore: disconnect_barrier,
-        })
+        Ok(FrontConnection { rx, rx_disconnect })
     }
 
     pub async fn waiting_to_start(&mut self) -> Result<Client, Error> {
-
         match self.rx.recv().await {
             Some(client) => Ok(client),
             None => Err(Error::new(
@@ -73,19 +59,23 @@ impl FrontConnection {
     }
 
     pub async fn waiting_to_disconnect(&mut self) -> Result<(), Error> {
-        self.disconnect_semaphore.wait().await;            
-        
-        Ok(())
+        match self.rx_disconnect.recv().await {
+            Some(_b) => Ok(()),
+            None => Err(Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to receive disconnect.",
+            )),
+        }
     }
 }
 
 pub async fn handle_message(
     tx: mpsc::Sender<Client>,
+    tx_disconnect: mpsc::Sender<bool>,
     msg: String,
-    disconnect_semaphore: Arc<Barrier>,
 ) {
     let parts: Vec<&str> = msg.split('|').collect();
-    println!("Llego: {}",parts[0]);
+    println!("Llego: {}", parts[0]);
     match parts[0] {
         "startOffering" => {
             let username = parts[1].trim_end_matches('\n').to_string();
@@ -113,7 +103,10 @@ pub async fn handle_message(
             tx.send(client).await.expect("Failed to send client."); //TODO: Handle error
         }
         "disconnect" => {
-            disconnect_semaphore.wait().await;
+            tx_disconnect
+                .send(true)
+                .await
+                .expect("Failed to send disconnect.");
         }
         _ => (),
     }

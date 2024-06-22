@@ -177,7 +177,7 @@ impl WsProtocol {
         }
     }
 
-    pub async fn wait_for_stop_session(&mut self) -> Result<String, Error> {
+    pub async fn wait_for_stop_session(&mut self) -> Result<(), Error> {
         let msg = match self.ws.receive().await {
             Ok(msg) => msg,
             Err(_) => {
@@ -187,9 +187,8 @@ impl WsProtocol {
         let response = msg.as_text().unwrap().0;
         let parts: Vec<&str> = response.split('|').collect();
         match parts[0] {
-            "stopSessionByTimer" => {
-                let sdp = parts[1];
-                Ok(sdp.to_string())
+            "notifEndSession" => {
+                Ok(())
             }
             _ => Err(Error::new(ErrorKind::InvalidData, "Should be offerer sdp")),
         }

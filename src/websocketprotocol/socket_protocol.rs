@@ -47,7 +47,7 @@ impl WsProtocol {
                 client_name: parts[1].to_owned(),
                 game_name: parts[2].to_owned(),
                 game_path: parts[3].to_owned(),
-                minutes: 60.to_string(),
+                minutes: parts[4].to_owned(),
             }),
             _ => Err(Error::new(ErrorKind::InvalidData, "Should be sdp request.")),
         }

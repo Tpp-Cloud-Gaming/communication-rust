@@ -54,7 +54,7 @@ struct EnumData {
     hwnd: Option<HWND>,
 }
 
-const HANDLER_RETRIES: usize = 5;
+const HANDLER_RETRIES: usize = 8;
 const HANDLER_SLEEP: usize = 10000;
 
 pub fn initialize_game(game_path: &str) -> Result<(), Error> {
@@ -74,8 +74,9 @@ pub fn initialize_game(game_path: &str) -> Result<(), Error> {
 pub fn get_handler(target_path: &str) -> Result<(u64, u32), Error> {
     let mut found_process: Option<ProcessInfo> = None;
     let game_path: String = target_path.replace("\\\\", "\\");
-    sleep(Duration::from_millis(20000));
-    for _ in 0..HANDLER_RETRIES {
+
+    //sleep(Duration::from_millis(20000));
+    for i in 0..HANDLER_RETRIES {
         if let Ok(processes) = get_processes_info() {
             for process in processes {
                 if process.path == game_path {
@@ -88,6 +89,7 @@ pub fn get_handler(target_path: &str) -> Result<(u64, u32), Error> {
             }
         }
         sleep(Duration::from_millis(HANDLER_SLEEP as u64));
+        println!("Retrying get info... {}/{}\r", i + 1, HANDLER_RETRIES);
     }
 
     if found_process.is_none() {
@@ -97,13 +99,14 @@ pub fn get_handler(target_path: &str) -> Result<(u64, u32), Error> {
             "Process PID not found after retries",
         ));
     }
-    for _ in 0..HANDLER_RETRIES {
+    for i in 0..HANDLER_RETRIES {
         if let Some(process) = &found_process {
             if let Some(hwnd) = get_hwnd_by_pid(process.pid) {
                 return Ok((hwnd as u64, process.pid));
             }
         }
         sleep(Duration::from_millis(HANDLER_SLEEP as u64));
+        println!("Retrying get hwnd... {}/{}\r", i + 1, HANDLER_RETRIES);
     }
     log::error!("SENDER UTILS | Process not found HWND");
     Err(Error::new(

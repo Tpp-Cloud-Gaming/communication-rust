@@ -30,11 +30,9 @@ async fn main() -> Result<(), Error> {
 
         let client = match front_connection.waiting_to_start().await {
             Ok(c) => c,
-            Err(e) => {
-                if e.kind() == std::io::ErrorKind::ConnectionAborted {
-                    break;
-                }
-                return Err(e);
+            Err(_) => {
+                println!("Se termino la conexion flutter");
+                break;   
             }
         };
 

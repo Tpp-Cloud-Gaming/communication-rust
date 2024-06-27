@@ -9,6 +9,8 @@ pub mod video;
 pub mod webrtcommunication;
 pub mod websocketprotocol;
 
+use front_connection::front_protocol_const::FRONT_PORT;
+
 use crate::front_connection::front_protocol::{ClientType, FrontConnection};
 use crate::services::receiver::ReceiverSide;
 use crate::services::sender::SenderSide;
@@ -22,7 +24,7 @@ async fn main() -> Result<(), Error> {
     // Initialize GStreamer
     gstreamer::init().unwrap();
 
-    let mut front_connection = FrontConnection::new("2930").await?;
+    let mut front_connection = FrontConnection::new(FRONT_PORT).await?;
 
     loop {
         let mut ws: WsProtocol = WsProtocol::ws_protocol().await?;
@@ -32,7 +34,7 @@ async fn main() -> Result<(), Error> {
             Ok(c) => c,
             Err(_) => {
                 println!("Se termino la conexion flutter");
-                break;   
+                break;
             }
         };
 

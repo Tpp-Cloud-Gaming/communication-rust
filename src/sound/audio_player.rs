@@ -1,11 +1,6 @@
-use std::
-    collections::HashMap
-;
+use std::collections::HashMap;
 
 use gstreamer::{glib, Element};
-
-
-
 
 /// Creates the elements for the audio player pipeline.
 ///
@@ -53,4 +48,3 @@ pub fn create_elements() -> Result<HashMap<&'static str, Element>, glib::BoolErr
 
     Ok(elements)
 }
-

@@ -2,9 +2,6 @@ use std::collections::HashMap;
 
 use gstreamer::{glib, Element};
 
-
-
-
 /// Creates GStreamer elements required for audio capture pipeline.
 ///
 /// # Returns

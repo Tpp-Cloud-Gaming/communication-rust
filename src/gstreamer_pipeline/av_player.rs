@@ -127,7 +127,7 @@ pub async fn start_player(
         println!("SE CAMBIA EL ESTADO A NULL");
     }
 
-    handle_read_bus.await;
+    let _ = handle_read_bus.await;
 }
 
 /// Creates the pipeline for the audio and video player.

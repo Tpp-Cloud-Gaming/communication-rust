@@ -40,7 +40,7 @@ impl Latency {
             latency_channel.on_open(Box::new(move || {
             log::debug!("LATENCY | Data channel '{}'-'{}' open. Random messages will now be sent to any connected DataChannels every {} seconds", d1.label(), d1.id(),LOOP_LATENCY_TIME);
             let d2 = Arc::clone(&d1);
-            //TODO: Retornar errores ?
+
             Box::pin(async move {
                 loop {
                     let timeout = tokio::time::sleep(Duration::from_secs(LOOP_LATENCY_TIME));
@@ -146,7 +146,6 @@ impl Latency {
                     let mut file = file.lock().unwrap();
                     if let Err(_e) = write_in_file(&mut file, result) {
                         log::error!("LATENCY | Error writing file");
-                        return;
                     };
                 })
             }));

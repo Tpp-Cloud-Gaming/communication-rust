@@ -3,6 +3,8 @@ use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
+
+use crate::front_connection::front_protocol_const::*;
 pub struct FrontConnection {
     rx: mpsc::Receiver<Client>,
     rx_disconnect: mpsc::Receiver<bool>,
@@ -23,7 +25,7 @@ pub struct Client {
 
 impl FrontConnection {
     pub async fn new(port: &str) -> Result<FrontConnection, Error> {
-        let listener = TcpListener::bind("127.0.0.1:".to_string() + port).await?;
+        let listener = TcpListener::bind(FRONT_IP.to_string() + port).await?;
 
         let mut socket = listener.accept().await?.0;
 
@@ -75,9 +77,8 @@ pub async fn handle_message(
     msg: String,
 ) {
     let parts: Vec<&str> = msg.split('|').collect();
-    println!("Llego: {}", parts[0]);
     match parts[0] {
-        "startOffering" => {
+        START_OFFERING_MSG => {
             let username = parts[1].trim_end_matches('\n').to_string();
             let client = Client {
                 client_type: ClientType::SENDER,
@@ -88,7 +89,7 @@ pub async fn handle_message(
             };
             tx.send(client).await.expect("Failed to send client."); //TODO: Handle error
         }
-        "startGameWithUser" => {
+        START_GAME_MSG => {
             let username = parts[1].to_string();
             let user_to_connect = parts[2].to_string();
             let game_name = parts[3].to_string();
@@ -102,7 +103,7 @@ pub async fn handle_message(
             };
             tx.send(client).await.expect("Failed to send client."); //TODO: Handle error
         }
-        "disconnect" => {
+        DISCONNECT_MSG => {
             tx_disconnect
                 .send(true)
                 .await

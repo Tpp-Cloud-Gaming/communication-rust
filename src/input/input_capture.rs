@@ -178,7 +178,10 @@ async fn start_handler(
                 let key = vk.into_u8().to_string();
                 match handle_button_action(button_channel, action_str, key, shutdown_clone).await {
                     Ok(_) => (),
-                    Err(e) => eprintln!("Failed to handle button action: {}", e),
+                    Err(e) => log::error!(
+                        "INPUT CAPTURE | START HANDLER | Failed to handle button action: {}",
+                        e
+                    ),
                 }
             }
 
@@ -200,7 +203,10 @@ async fn start_handler(
                 .await
                 {
                     Ok(_) => (),
-                    Err(e) => eprintln!("Failed to handle button action: {}", e),
+                    Err(e) => log::error!(
+                        "INPUT CAPTURE | START HANDLER | Failed to handle button action: {}",
+                        e
+                    ),
                 }
             }
 
@@ -226,7 +232,10 @@ async fn start_handler(
                 .await
                 {
                     Ok(_) => (),
-                    Err(e) => eprintln!("Failed to handle button action: {}", e),
+                    Err(e) => log::error!(
+                        "INPUT CAPTURE | START HANDLER | Failed to handle button action: {}",
+                        e
+                    ),
                 }
             }
 
@@ -244,7 +253,10 @@ async fn start_handler(
                         .await
                     {
                         Ok(_) => (),
-                        Err(e) => eprintln!("Failed to send mouse event: {}", e),
+                        Err(e) => log::error!(
+                            "INPUT CAPTURE | START HANDLER | Failed to send mouse event: {}",
+                            e
+                        ),
                     }
                 }
             }

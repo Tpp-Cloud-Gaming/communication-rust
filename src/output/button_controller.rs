@@ -59,8 +59,9 @@ impl ButtonController {
                                 return;
                             }
                         };
-                        let button = get_mouse_button(key);
-                        winput::press(button);
+                        if let Some(button) = get_mouse_button(key) {
+                            winput::press(button);
+                        }
                     }
                     RELEASE_MOUSE_ACTION => {
                         let key = match rest.parse::<u8>() {
@@ -70,8 +71,9 @@ impl ButtonController {
                                 return;
                             }
                         };
-                        let button = get_mouse_button(key);
-                        winput::release(button);
+                        if let Some(button) = get_mouse_button(key) {
+                            winput::release(button);
+                        }
                     }
                     SCROLL_HORIZONTAL_ACTION => {
                         let delta = match rest.parse::<f32>() {
@@ -101,14 +103,14 @@ impl ButtonController {
 }
 
 /// Maps the numeric key value to the corresponding mouse button.
-fn get_mouse_button(key: u8) -> Button {
+fn get_mouse_button(key: u8) -> Option<Button> {
     match key {
-        0 => Button::Left,
-        1 => Button::Right,
-        2 => Button::Middle,
-        3 => Button::X1,
-        4 => Button::X2,
-        _ => Button::Left, //TODO: fix this
+        0 => Some(Button::Left),
+        1 => Some(Button::Right),
+        2 => Some(Button::Middle),
+        3 => Some(Button::X1),
+        4 => Some(Button::X2),
+        _ => None,
     }
 }
 

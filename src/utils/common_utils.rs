@@ -45,7 +45,7 @@ pub fn wait_disconnect(mut shutdown: Shutdown) -> tokio::task::JoinHandle<()> {
             f = FrontConnection::new("3132") => {
                 match f {
                     Ok(mut front_connection) => {
-                        front_connection.waiting_to_disconnect().await;
+                        let _ = front_connection.waiting_to_disconnect().await;
                         println!("Ended by disconnect signal");
                         shutdown.notify_error(false, "").await;
                     },

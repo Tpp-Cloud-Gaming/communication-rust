@@ -230,7 +230,7 @@ impl SenderSide {
             }
 
             if !wait_shutdown {
-                shutdown.wait_for_shutdown().await;
+                let _ = shutdown.wait_for_shutdown().await;
             }
         }
 
@@ -469,7 +469,7 @@ async fn start_audio_sending(
         crate::utils::error_tracker::ErrorTracker::new(SEND_TRACK_THRESHOLD, SEND_TRACK_LIMIT);
 
     let sample_duration =
-        Duration::from_millis((AUDIO_CHANNELS as u64 * 10000000) / AUDIO_SAMPLE_RATE as u64); //TODO: no hardcodear
+        Duration::from_millis((AUDIO_CHANNELS as u64 * 10000000) / AUDIO_SAMPLE_RATE as u64);
 
     let mut data = match rx.recv().await {
         Some(d) => d,

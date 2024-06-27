@@ -108,7 +108,7 @@ fn create_pipeline(
                     Err(err) => {
                         log::error!("VIDEO CAPTURE | {}", err);
                         let shutdown_cpy = shutdown.clone();
-                        let _ = Box::pin(async move {
+                        tokio::spawn(async move {
                             shutdown_cpy
                                 .notify_error(false, "Video capture Set callbacks")
                                 .await;
@@ -230,7 +230,7 @@ pub async fn start_capture(
         read_bus(pipeline_cpy, &mut shutdown_cpy).await;
     });
 
-    shutdown.wait_for_error().await;
+    let _ = shutdown.wait_for_error().await;
     log::error!("PLAYER | start_capture | Shutdown received");
 
     if let Err(e) = pipeline.set_state(gstreamer::State::Null) {
@@ -239,7 +239,7 @@ pub async fn start_capture(
         println!("SE CAMBIA EL ESTADO A NULL");
     }
 
-    handle_read_bus.await;
+    let _ = handle_read_bus.await;
 
     // tokio::select! {
     //     _ = shutdown.wait_for_error() => {

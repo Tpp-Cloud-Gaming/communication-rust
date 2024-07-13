@@ -1,7 +1,8 @@
 use sntpc::NtpResult;
+use std::io::Write;
 use std::io::{Error, ErrorKind};
 use std::net::UdpSocket;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
@@ -11,6 +12,8 @@ use crate::utils::latency_const::{
     LATENCY_CHANNEL_LABEL, LOOP_LATENCY_TIME, MAX_SNTP_RETRY, SNTP_POOL_ADDR, SNTP_SEND_SLEEP,
     UDP_SOCKET_ADDR, UDP_SOCKET_TIMEOUT,
 };
+
+const LATENCY_CHECK: bool = false;
 
 /// Struct to measure the latency between the peers in the Sender or Receiver side
 ///
@@ -30,13 +33,14 @@ impl Latency {
             }
         };
         log::debug!("LATENCY | Latency Data channel created");
-        let socket = create_socket(UDP_SOCKET_ADDR, Duration::from_secs(UDP_SOCKET_TIMEOUT))?;
-        // Register channel opening handling
-        let d1 = Arc::clone(&latency_channel);
-        latency_channel.on_open(Box::new(move || {
+        if LATENCY_CHECK {
+            let socket = create_socket(UDP_SOCKET_ADDR, Duration::from_secs(UDP_SOCKET_TIMEOUT))?;
+            // Register channel opening handling
+            let d1 = Arc::clone(&latency_channel);
+            latency_channel.on_open(Box::new(move || {
             log::debug!("LATENCY | Data channel '{}'-'{}' open. Random messages will now be sent to any connected DataChannels every {} seconds", d1.label(), d1.id(),LOOP_LATENCY_TIME);
             let d2 = Arc::clone(&d1);
-            //TODO: Retornar errores ?
+
             Box::pin(async move {
                 loop {
                     let timeout = tokio::time::sleep(Duration::from_secs(LOOP_LATENCY_TIME));
@@ -66,7 +70,8 @@ impl Latency {
                     };
                 }
             })
-        }));
+            }));
+        }
 
         Ok(())
     }
@@ -79,50 +84,98 @@ impl Latency {
         }));
 
         let socket = create_socket(UDP_SOCKET_ADDR, Duration::from_secs(UDP_SOCKET_TIMEOUT))?;
-        //TODO: Retornar errores ?
-        // Register text message handling
-        ch.on_message(Box::new(move |msg: DataChannelMessage| {
-            let socket_cpy = match socket.try_clone() {
-                Ok(s) => s,
+
+        if LATENCY_CHECK {
+            // Create the log file
+            let now = chrono::Local::now();
+            let date = now.format("%Y-%m-%d_%H-%M-%S").to_string();
+            let file = match std::fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(format!("{}.txt", date))
+            {
+                Ok(f) => f,
                 Err(e) => {
-                    log::error!("LATENCY | Error cloning socket: {:?}", e);
-                    return Box::pin(async {});
+                    log::error!("LATENCY | Error opening file: {:?}", e);
+                    return Err(Error::new(ErrorKind::Other, "Error opening file"));
                 }
             };
-            Box::pin(async move {
-                let msg_str = match String::from_utf8(msg.data.to_vec()) {
+
+            // Register text message handling
+            let file = Arc::new(Mutex::new(file));
+
+            ch.on_message(Box::new(move |msg: DataChannelMessage| {
+                let file = Arc::clone(&file);
+                let socket_cpy = match socket.try_clone() {
                     Ok(s) => s,
                     Err(e) => {
-                        log::error!("LATENCY | Error converting message to string: {:?}", e);
-                        return;
+                        log::error!("LATENCY | Error cloning socket: {:?}", e);
+                        return Box::pin(async {});
                     }
                 };
-                let rec_time = match msg_str.parse::<u32>() {
-                    Ok(t) => t,
-                    Err(e) => {
-                        log::error!("LATENCY |Error parsing message to u32: {:?}", e);
-                        return;
-                    }
-                };
-                let time = match get_time(socket_cpy) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        log::error!("LATENCY |Error getting time: {:?}", e);
-                        return;
-                    }
-                };
-                if time.checked_sub(rec_time).is_none() {
-                    log::error!("LATENCY | Error calculating difference");
-                    return;
-                }
-                log::debug!("LATENCY | Difference: {} milliseconds", time);
-            })
-        }));
-
+                Box::pin(async move {
+                    let msg_str = match String::from_utf8(msg.data.to_vec()) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            log::error!("LATENCY | Error converting message to string: {:?}", e);
+                            return;
+                        }
+                    };
+                    let rec_time = match msg_str.parse::<u32>() {
+                        Ok(t) => t,
+                        Err(e) => {
+                            log::error!("LATENCY |Error parsing message to u32: {:?}", e);
+                            return;
+                        }
+                    };
+                    let time = match get_time(socket_cpy) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            log::error!("LATENCY |Error getting time: {:?}", e);
+                            return;
+                        }
+                    };
+                    let result = match time.checked_sub(rec_time) {
+                        None => {
+                            log::error!("LATENCY | Error calculating difference");
+                            return;
+                        }
+                        Some(t) => t,
+                    };
+                    log::info!("LATENCY CHECK | Difference: {} milliseconds", result);
+                    let mut file = file.lock().unwrap();
+                    if let Err(_e) = write_in_file(&mut file, result) {
+                        log::error!("LATENCY | Error writing file");
+                    };
+                })
+            }));
+        }
         Ok(())
     }
 }
 
+fn write_in_file(file: &mut std::fs::File, latency: u32) -> Result<(), Error> {
+    // Get current date and time
+    let now = chrono::Local::now();
+
+    // Write to the file
+    match writeln!(file, "{},{}", now.to_rfc3339(), latency) {
+        Ok(_) => (),
+        Err(e) => log::error!("LATENCY | Error writing to file: {:?}", e),
+    };
+    Ok(())
+}
+
+/// Creates a UDP socket binded to the specified address with a read timeout.
+///
+/// # Arguments
+///
+/// * `address` - A string representing the address to bind the socket to.
+/// * `timeout` - The duration of the read timeout for the socket.
+///
+/// # Returns
+///
+/// A Result containing the created UDP socket on success. Otherwhise an Error is returned.
 fn create_socket(address: &str, timeout: Duration) -> Result<UdpSocket, Error> {
     let socket = UdpSocket::bind(address)?;
     match socket.set_read_timeout(Some(timeout)) {
@@ -131,6 +184,16 @@ fn create_socket(address: &str, timeout: Duration) -> Result<UdpSocket, Error> {
     }
 }
 
+/// Calculates the latency.
+///
+/// # Arguments
+///
+/// * `socket` - A UDP socket used for communication with the SNTP server.
+///
+/// # Returns
+///
+/// A [`Result`] containing the calculated latency in milliseconds on success.
+/// On failure, returns an [`Error`] indicating the cause of the error.
 fn get_time(socket: UdpSocket) -> Result<u32, Error> {
     let result = get_time_from_sntp(socket)?;
 
@@ -148,7 +211,7 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
     };
 
     if last_two_digits == 0 {
-        log::error!("LATENCY | Last two digits are 0");
+        log::info!("LATENCY | Last two digits are 0");
         return Ok(0);
     }
 
@@ -157,7 +220,7 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
         _secs_in_milis = t;
     } else {
         //Overflow detected
-        log::error!("LATENCY | Overflow when multiplying last two digits by 1000");
+        log::info!("LATENCY | Overflow when multiplying last two digits by 1000");
         return Ok(0);
     }
 
@@ -165,7 +228,7 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
     if let Some(t) = result.roundtrip().checked_div(1000) {
         _rtt_in_milis = t;
     } else {
-        log::error!("LATENCY | Overflow when dividing roundtrip by 1000");
+        log::info!("LATENCY | Overflow when dividing roundtrip by 1000");
         return Ok(0);
     };
 
@@ -175,14 +238,30 @@ fn get_time(socket: UdpSocket) -> Result<u32, Error> {
     )
 }
 
+/// Gets time from the SNTP server.
+///
+/// # Arguments
+///
+/// * `socket` - A UDP socket used for communication with the SNTP server.
+///
+/// # Returns
+///
+/// A `Result` containing the `NtpResult`.
+/// On failure, returns an `Error` indicating the cause of the error.
 fn get_time_from_sntp(socket: UdpSocket) -> Result<NtpResult, Error> {
     let mut retry = 0;
     let mut result: NtpResult = NtpResult::new(0, 0, 0, 0, 0, 0);
 
     // If http request fails, retry max_retry times
     while retry < MAX_SNTP_RETRY {
-        //TODO:unwrap
-        if let Ok(r) = sntpc::simple_get_time(SNTP_POOL_ADDR, socket.try_clone().unwrap()) {
+        let socket_clone = match socket.try_clone() {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("LATENCY | Error cloning socket: {:?}", e);
+                return Err(Error::new(ErrorKind::Other, "Error cloning socket"));
+            }
+        };
+        if let Ok(r) = sntpc::simple_get_time(SNTP_POOL_ADDR, socket_clone) {
             result = r;
             break;
         } else {
